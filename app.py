@@ -24,6 +24,8 @@ config = load_config()
 
 @app.route('/')
 def index():
+    # 이 부분은 팀의 디자인에 맞게 자유롭게 수정하시면 됩니다.
+    # 지금은 기본값으로 설정해 두었습니다.
     return render_template('index.html', bot=config)
 
 @app.route('/detail')
@@ -36,14 +38,12 @@ def chat():
     bot_name = config.get('name', '사건 파일')
     return render_template('chat.html', bot_name=bot_name, username=username)
 
-# === [최종 수정] 새로운 게임 시작 API 추가 ===
 @app.route('/api/start_new_game', methods=['POST'])
 def start_new_game():
     from services import get_chatbot_service
     chatbot = get_chatbot_service()
-    chatbot.start_new_game() # ChatbotService의 게임 초기화 함수를 직접 호출
+    chatbot.start_new_game()
     return jsonify({"message": "New game started successfully."})
-# ============================================
 
 @app.route('/api/chat', methods=['POST'])
 def api_chat():
@@ -70,6 +70,25 @@ def api_recommendations():
     chatbot = get_chatbot_service()
     questions = chatbot.get_recommended_questions(suspect_id)
     return jsonify(questions)
+
+@app.route('/api/accuse', methods=['POST'])
+def api_accuse():
+    try:
+        data = request.get_json()
+        accused_suspect_id = data.get('suspect_id')
+        if not accused_suspect_id:
+            return jsonify({'error': 'suspect_id is required'}), 400
+        
+        from services import get_chatbot_service
+        chatbot = get_chatbot_service()
+        
+        result = chatbot.make_accusation(accused_suspect_id)
+        
+        return jsonify(result)
+
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({"result": "error", "message": "서버 오류가 발생했습니다."}), 500
 
 @app.route('/health')
 def health():

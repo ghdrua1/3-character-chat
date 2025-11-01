@@ -43,35 +43,40 @@ class ChatbotService:
             return self._handle_briefing(user_message)
         current_mode = self.game_session.get("mode")
         questions_left = self.game_session.get("questions_left", 0)
+        
+        response = {"questions_left": questions_left, "mode": current_mode}
+
         if current_mode == "error":
-            return {"reply": f"게임 초기화 오류: {self.game_session.get('error_message')}", "sender": "system", "questions_left": questions_left}
-        if current_mode == "briefing":
-            return self._handle_briefing(user_message)
+            response.update({"reply": f"게임 초기화 오류: {self.game_session.get('error_message')}", "sender": "system"})
+        elif current_mode == "briefing":
+            response.update(self._handle_briefing(user_message))
         elif current_mode == "interrogation":
             if not suspect_id:
-                return {"reply": "심문할 용의자를 선택해 주십시오.", "sender": "system", "questions_left": questions_left}
-            return self._handle_interrogation(user_message, suspect_id)
-        return {"reply": "게임 모드 설정에 오류가 발생했습니다.", "sender": "system", "questions_left": questions_left}
+                response.update({"reply": "심문할 용의자를 선택해 주십시오.", "sender": "system"})
+            else:
+                response.update(self._handle_interrogation(user_message, suspect_id))
+        else:
+             response.update({"reply": "게임 모드 설정에 오류가 발생했습니다.", "sender": "system"})
+        
+        return response
 
     def _handle_briefing(self, user_message: str) -> dict:
-        questions_left = self.game_session.get("questions_left", 15)
-        if "nathan_script" not in self.game_session or not self.game_session["nathan_script"]:
-             return {"reply": "오류: Nathan의 스크립트를 로드할 수 없습니다.", "sender": "system", "questions_left": questions_left}
         script = self.game_session["nathan_script"]["briefing"]
         if user_message.strip().lower() == "init":
-            return {"reply": script["intro"], "sender": "nathan", "questions_left": questions_left}
+            return {"reply": script["intro"], "sender": "nathan"}
         if any(keyword in user_message for keyword in ["알겠습니다", "알겠", "시작"]):
             self.game_session["mode"] = "interrogation"
             initial_clue = self.game_session["clues"]["initial"]
             reply = f"좋습니다, 탐정님. 첫 번째 단서를 드리죠.\n\n[단서]: {initial_clue}"
             reply += script["start_interrogation"]
-            return {"reply": reply, "sender": "nathan", "questions_left": questions_left}
-        return {"reply": script["default"], "sender": "nathan", "questions_left": questions_left}
+            return {"reply": reply, "sender": "nathan"}
+        return {"reply": script["default"], "sender": "nathan"}
 
     def _handle_interrogation(self, user_message: str, suspect_id: str) -> dict:
         try:
             if self.game_session["questions_left"] <= 0:
-                return {"reply": "더 이상 질문할 수 없습니다. 이제 범인을 지목해야 합니다.", "sender": "system", "questions_left": 0}
+                return {"reply": "더 이상 질문할 수 없습니다. 이제 범인을 지목해야 합니다.", "sender": "system"}
+            
             is_killer = (self.game_session["killer"] == suspect_id)
             suspect_config = self._load_suspect_config(suspect_id)
             knowledge_base = self.game_session["active_knowledge"][suspect_id]
@@ -81,17 +86,55 @@ class ChatbotService:
             final_prompt = self._build_final_prompt(suspect_config, system_prompt, history, user_message, retrieved_doc)
             response = self.client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "user", "content": final_prompt}], temperature=0.7, max_tokens=300)
             reply = response.choices[0].message.content.strip()
+
             self.game_session["questions_left"] -= 1
             self._save_to_history(suspect_id, user_message, reply)
-            return {"reply": reply, "sender": suspect_id, "questions_left": self.game_session["questions_left"]}
+            return {"reply": reply, "sender": suspect_id}
         except Exception as e:
             import traceback; traceback.print_exc()
-            return {"reply": "죄송합니다. 생각에 잠시 오류가 생긴 것 같습니다...", "sender": suspect_id, "questions_left": self.game_session.get("questions_left", 0)}
+            return {"reply": "죄송합니다. 생각에 잠시 오류가 생긴 것 같습니다...", "sender": suspect_id}
+
+    def make_accusation(self, accused_suspect_id: str) -> dict:
+        real_killer_id = self.game_session["killer"]
+        is_correct = (accused_suspect_id == real_killer_id)
+        
+        final_prompt = ""
+        sender_id = accused_suspect_id
+        
+        if is_correct:
+            killer_config = self._load_suspect_config(real_killer_id)
+            final_prompt = f"""
+# Master Instruction
+당신은 마침내 정체가 탄로난 범인 '{killer_config['name']}'입니다. 탐정 'Adrian Vale'이 당신의 모든 거짓말을 꿰뚫어보고, 당신을 범인으로 지목했습니다. 더 이상 빠져나갈 길이 없습니다.
+# Persona
+{killer_config['system_prompt_killer']}
+# Task
+탐정이 당신을 범인으로 지목한 이 마지막 순간, 당신의 페르소나에 맞춰 모든 것을 자백하는 극적인 최종 변론을 하세요. 왜 피해자를 죽여야만 했는지, 당신의 동기를 절절하게 토로하며 대사를 마무리하세요."""
+        else:
+            innocent_config = self._load_suspect_config(accused_suspect_id)
+            killer_config = self._load_suspect_config(real_killer_id)
+            sender_id = "system" 
+            final_prompt = f"""
+# Master Instruction
+당신은 뛰어난 스토리텔러입니다. 탐정 'Adrian Vale'이 '{innocent_config['name']}'을 범인으로 지목했지만, 틀렸습니다. 진범은 '{killer_config['name']}'입니다.
+# Task
+1. 먼저, 억울하게 지목된 '{innocent_config['name']}'의 페르소나({innocent_config['system_prompt_innocent']})에 맞춰, 그의 억울함과 절망이 담긴 짧은 반박 대사를 생성하세요.
+2. 이어서, 사건의 진실을 설명하는 나레이션을 작성하세요. 왜 진범이 '{killer_config['name']}'일 수밖에 없었는지, 그의 결정적인 동기와 증거를 언급하며 비극적인 사건의 전말을 서술하세요."""
+
+        response = self.client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "user", "content": final_prompt}], temperature=0.8, max_tokens=500)
+        final_statement = response.choices[0].message.content.strip()
+
+        return {
+            "result": "success" if is_correct else "failure",
+            "final_statement": final_statement,
+            "sender": sender_id,
+            "is_game_over": True
+        }
 
     def get_recommended_questions(self, suspect_id: str) -> list:
         knowledge = self._load_suspect_knowledge(suspect_id)
         return knowledge.get("recommended_questions", []) if knowledge else []
-
+        
     def _build_final_prompt(self, suspect_config, system_prompt, history, user_message, retrieved_doc):
         if retrieved_doc:
             fact_to_use = retrieved_doc['fact']
