@@ -1,3 +1,5 @@
+# app.py (전체 코드)
+
 """
 🚫 이 파일은 수정하지 마세요! (템플릿 파일)
 
@@ -71,10 +73,10 @@ def get_image_files():
 @app.route('/')
 def index():
     bot_info = {
-        'name': config.get('name', '챗봇'),
+        'name': config.get('name', '탐정 추리 챗봇'),
         'image': url_for('static', filename=config.get('thumbnail', 'images/hateslop/club_logo.png')),
-        'tags': config.get('tags', ['#챗봇']),
-        'description': config.get('description', '')
+        'tags': config.get('tags', ['#추리', '#챗봇']),
+        'description': config.get('description', '사건의 진실을 파헤치세요.')
     }
     return render_template('index.html', bot=bot_info)
 
@@ -82,18 +84,18 @@ def index():
 @app.route('/detail')
 def detail():
     bot_info = {
-        'name': config.get('name', '챗봇'),
+        'name': config.get('name', '탐정 추리 챗봇'),
         'image': url_for('static', filename=config.get('thumbnail', 'images/hateslop/club_logo.png')),
-        'description': config.get('description', ''),
-        'tags': config.get('tags', ['#챗봇'])
+        'description': config.get('description', '세 명의 용의자, 단 하나의 진실.'),
+        'tags': config.get('tags', ['#추리', '#챗봇'])
     }
     return render_template('detail.html', bot=bot_info)
 
 # 채팅 화면
 @app.route('/chat')
 def chat():
-    username = request.args.get('username', '사용자')
-    bot_name = config.get('name', '챗봇')
+    username = request.args.get('username', '탐정')
+    bot_name = config.get('name', '사건 파일')
     image_files = get_image_files()
     
     return render_template('chat.html', 
@@ -101,32 +103,37 @@ def chat():
                          username=username,
                          image_files=image_files)
 
-# API 엔드포인트: 챗봇 응답 생성
+# =========================================================
+# === 여기가 핵심 수정 부분입니다! (API 엔드포인트 로직) ===
+# =========================================================
 @app.route('/api/chat', methods=['POST'])
 def api_chat():
     try:
         data = request.get_json()
         user_message = data.get('message', '')
-        username = data.get('username', '사용자')
+        suspect_id = data.get('suspect_id')  # 'username' 대신 'suspect_id'를 받습니다.
         
         if not user_message:
             return jsonify({'error': 'Message is required'}), 400
         
-        # 챗봇 서비스 임포트 (지연 로딩)
+        # 챗봇 서비스 임포트
         from services import get_chatbot_service
         
-        # 응답 생성
         chatbot = get_chatbot_service()
-        response = chatbot.generate_response(user_message, username)
+        # 수정된 함수 호출 방식에 맞게 올바른 인자를 전달합니다.
+        response = chatbot.generate_response(user_message, suspect_id)
         
         return jsonify(response)
         
     except ImportError as e:
         print(f"[ERROR] 챗봇 서비스 임포트 실패: {e}")
-        return jsonify({'reply': '챗봇 서비스를 불러올 수 없습니다. services/chatbot_service.py를 구현해주세요.'}), 500
+        return jsonify({'reply': '챗봇 서비스를 불러올 수 없습니다. services/chatbot_service.py를 구현해주세요.', 'sender': 'system'}), 500
     except Exception as e:
         print(f"[ERROR] 응답 생성 실패: {e}")
-        return jsonify({'reply': '죄송해요, 일시적인 오류가 발생했어요. 다시 시도해주세요.'}), 500
+        # traceback을 import하여 더 자세한 에러 로그를 출력하도록 개선
+        import traceback
+        traceback.print_exc()
+        return jsonify({'reply': '죄송해요, 서버에서 처리 중 오류가 발생했어요. 터미널 로그를 확인해주세요.', 'sender': 'system'}), 500
 
 # 헬스체크 엔드포인트 (Vercel용)
 @app.route('/health')
