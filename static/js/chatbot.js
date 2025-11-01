@@ -12,7 +12,7 @@ const imageBtn = document.getElementById("imageBtn");
 // 현재 선택된 용의자 ID (나중에 UI와 연동)
 // 우선 테스트를 위해 기본값으로 'leonard'를 설정해두거나,
 // 혹은 UI가 구현되기 전까지는 하드코딩하여 테스트할 수 있습니다.
-let currentSuspectId = null; // 초기에는 아무도 선택되지 않음
+let currentSuspectId = 'leonard'; // 초기에는 아무도 선택되지 않음
 
 // ========================================================================
 // === 이 부분은 나중에 용의자 탭 UI를 만들 때 연동할 로직의 예시입니다. ===
