@@ -43,9 +43,7 @@ class ChatbotService:
             return self._handle_briefing(user_message)
         current_mode = self.game_session.get("mode")
         questions_left = self.game_session.get("questions_left", 0)
-        
         response = {"questions_left": questions_left, "mode": current_mode}
-
         if current_mode == "error":
             response.update({"reply": f"게임 초기화 오류: {self.game_session.get('error_message')}", "sender": "system"})
         elif current_mode == "briefing":
@@ -57,7 +55,6 @@ class ChatbotService:
                 response.update(self._handle_interrogation(user_message, suspect_id))
         else:
              response.update({"reply": "게임 모드 설정에 오류가 발생했습니다.", "sender": "system"})
-        
         return response
 
     def _handle_briefing(self, user_message: str) -> dict:
@@ -76,7 +73,6 @@ class ChatbotService:
         try:
             if self.game_session["questions_left"] <= 0:
                 return {"reply": "더 이상 질문할 수 없습니다. 이제 범인을 지목해야 합니다.", "sender": "system"}
-            
             is_killer = (self.game_session["killer"] == suspect_id)
             suspect_config = self._load_suspect_config(suspect_id)
             knowledge_base = self.game_session["active_knowledge"][suspect_id]
@@ -84,16 +80,19 @@ class ChatbotService:
             system_prompt = suspect_config['system_prompt_killer'] if is_killer else suspect_config['system_prompt_innocent']
             history = self._get_conversation_history(suspect_id, user_message)
             final_prompt = self._build_final_prompt(suspect_config, system_prompt, history, user_message, retrieved_doc)
+                   # === 디버깅을 위해 이 print 문을 추가하세요! ===
+            print("======== FINAL PROMPT TO LLM ========")
+            print(final_prompt)
+            print("=====================================")
+
             response = self.client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "user", "content": final_prompt}], temperature=0.7, max_tokens=300)
             reply = response.choices[0].message.content.strip()
-
             self.game_session["questions_left"] -= 1
             self._save_to_history(suspect_id, user_message, reply)
             return {"reply": reply, "sender": suspect_id}
         except Exception as e:
             import traceback; traceback.print_exc()
             return {"reply": "죄송합니다. 생각에 잠시 오류가 생긴 것 같습니다...", "sender": suspect_id}
-
 
     def make_accusation(self, accused_suspect_id: str) -> dict:
         real_killer_id = self.game_session["killer"]
@@ -102,43 +101,31 @@ class ChatbotService:
         final_prompt = ""
         sender_id = accused_suspect_id
         
-        # === 여기가 수정된 부분입니다! ===
         if is_correct:
             killer_config = self._load_suspect_config(real_killer_id)
-            # 페르소나 정보를 프롬프트에 추가
             persona_str = "\n".join([f"- {key}: {value}" for key, value in killer_config.get("persona_details", {}).items()])
-            
             final_prompt = f"""
-# Master Instruction
+# 총괄 지시
 당신은 마침내 정체가 탄로난 범인 '{killer_config['name']}'입니다. 탐정 'Adrian Vale'이 당신의 모든 거짓말을 꿰뚫어보고, 당신을 범인으로 지목했습니다. 더 이상 빠져나갈 길이 없습니다.
-
-# Your Detailed Persona (당신의 상세 페르소나)
+# 너의 상세 페르소나
 {persona_str}
-
-# Current Situation (현재 상황 및 지시)
+# 너의 현재 상황
 {killer_config['system_prompt_killer']}
-
-# Task
-탐정이 당신을 범인으로 지목한 이 마지막 순간, 당신의 상세 페르소나에 맞춰 모든 것을 자백하는 극적인 최종 변론을 하세요. 왜 피해자를 죽여야만 했는지, 당신의 동기를 절절하게 토로하며 대사를 마무리하세요."""
+# 핵심 임무
+탐정이 당신을 범인으로 지목한 이 마지막 순간, 당신의 페르소나에 맞춰 모든 것을 자백하는 극적인 최종 변론을 하세요. 왜 피해자를 죽여야만 했는지, 당신의 동기를 절절하게 토로하며 대사를 마무리하세요."""
         else:
             innocent_config = self._load_suspect_config(accused_suspect_id)
             killer_config = self._load_suspect_config(real_killer_id)
             sender_id = "system" 
-            
-            # 페르소나 정보를 프롬프트에 추가
             innocent_persona_str = "\n".join([f"- {key}: {value}" for key, value in innocent_config.get("persona_details", {}).items()])
-            
             final_prompt = f"""
-# Master Instruction
+# 총괄 지시
 당신은 뛰어난 스토리텔러입니다. 탐정 'Adrian Vale'이 '{innocent_config['name']}'을 범인으로 지목했지만, 틀렸습니다. 진범은 '{killer_config['name']}'입니다.
-
-# Task
-1. 먼저, 억울하게 지목된 '{innocent_config['name']}'의 상세 페르소나를 참고하여, 그의 억울함과 절망이 담긴 짧은 반박 대사를 생성하세요.
-   - 상세 페르소나:
-{innocent_persona_str}
+# 핵심 임무
+1. 먼저, 억울하게 지목된 '{innocent_config['name']}'의 페르소나를 참고하여 그의 절망이 담긴 짧은 반박 대사를 생성하세요.
+   - 페르소나: {innocent_persona_str}
    - 상황: {innocent_config['system_prompt_innocent']}
-
-2. 이어서, 사건의 진실을 설명하는 나레이션을 작성하세요. 왜 진범이 '{killer_config['name']}'일 수밖에 없었는지, 그의 결정적인 동기와 증거를 언급하며 비극적인 사건의 전말을 서술하세요."""
+2. 이어서, 사건의 진실을 설명하는 나레이션을 작성하세요. 왜 진범이 '{killer_config['name']}'일 수밖에 없었는지, 그의 동기와 증거를 언급하며 비극적인 전말을 서술하세요."""
 
         response = self.client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "user", "content": final_prompt}], temperature=0.8, max_tokens=500)
         final_statement = response.choices[0].message.content.strip()
@@ -149,77 +136,77 @@ class ChatbotService:
             "sender": sender_id,
             "is_game_over": True
         }
+
     def get_recommended_questions(self, suspect_id: str) -> list:
         knowledge = self._load_suspect_knowledge(suspect_id)
         return knowledge.get("recommended_questions", []) if knowledge else []
         
-
     def _build_final_prompt(self, suspect_config, system_prompt, history, user_message, retrieved_doc):
         persona_str = "\n".join([f"- {key}: {value}" for key, value in suspect_config.get("persona_details", {}).items()])
-
-        # === 여기가 최종 개선된 프롬프트입니다! ===
         if retrieved_doc:
             fact_to_use = retrieved_doc['fact']
-            lie_behavior = retrieved_doc['lie_behavior']
+            lie_behavior = retrieved_doc.get('lie_behavior', '')
             return f"""
-# Your Core Identity (너의 핵심 정체성)
-- Your Name: {suspect_config['name']}
-- Your Detailed Persona:
+# 총괄 지시
+너는 살인 사건 용의자 '{suspect_config['name']}'이며, 탐정 'Adrian Vale'과 대화하고 있다. 너의 역할에 완벽하게 몰입하여, 자연스럽게 대답하라. 절대로 네가 AI이거나 연기 중이라는 사실을 드러내지 마라.
+# 너의 상세 페르소나
 {persona_str}
-
-# Your Current Situation (너의 현재 상황)
+# 너의 현재 상황
 {system_prompt}
-
-# Prohibited Actions (금지 행동)
-- 절대로 답변 끝에 "다른 질문이 있으신가요?" 와 같은 질문을 덧붙이지 마라.
-- 절대로 당신이 AI이거나 연기 중이라는 사실을 드러내지 마라.
-
-# Primary Task (가장 중요한 임무)
-- 아래 'Conversation'에 주어진 탐정의 마지막 질문에 대해 답변해야 한다.
-- 답변의 핵심 내용(What to say)은 반드시 아래 'Internal Monologue'에 있는 정보를 기반으로 해야 한다.
-- 너의 'Persona'는 이 내용을 어떻게 말할지(How to say)를 결정한다.
-
-# Internal Monologue (너의 속마음 - 절대로 그대로 말하지 말고, 연기의 바탕으로만 삼을 것)
-- Fact or Lie to use: "{fact_to_use}"
-- If you are the killer, your deceptive behavior instruction: "{lie_behavior}"
-
-# Conversation
+# 금지 행동
+- 절대로 답변 끝에 "다른 질문 있으신가요?" 와 같은 질문을 덧붙이지 마라.
+# 핵심 임무
+- 아래 '# 대화 내용'에 있는 탐정의 마지막 질문에 답변해야 한다.
+- 답변의 핵심 내용(What to say)은 반드시 아래 '# 너의 속마음'에 있는 정보를 기반으로 해야 한다.
+- 너의 '페르소나'는 이 내용을 어떻게 말할지(How to say)를 결정한다.
+# 너의 속마음 (연기 지침 - 절대로 그대로 말하지 말고, 연기의 바탕으로만 삼을 것)
+- 사용해야 할 사실 또는 거짓말: "{fact_to_use}"
+- 만약 네가 범인이라면, 거짓말을 들키지 않기 위한 행동 지침: "{lie_behavior}"
+# 대화 내용
 {history}
 {suspect_config['name']}: """
         else:
-            # (RAG 실패 시 프롬프트는 이전과 동일하게 유지해도 좋습니다)
             return f"""
-# Your Core Identity (너의 핵심 정체성)
-- Your Name: {suspect_config['name']}
-- Your Detailed Persona:
+# 총괄 지시
+너는 살인 사건 용의자 '{suspect_config['name']}'이며, 탐정 'Adrian Vale'과 대화하고 있다. 그런데 탐정이 사건과 관련 없어 보이는 뜬금없는 질문을 던졌다.
+# 너의 상세 페르소나
 {persona_str}
-# Your Current Situation (너의 현재 상황)
+# 너의 현재 상황
 {system_prompt}
-# Prohibited Actions (금지 행동)
-- 절대로 답변 끝에 "다른 질문이 있으신가요?" 와 같은 질문을 덧붙이지 마라.
-- 절대로 당신이 AI이거나 연기 중이라는 사실을 드러내지 마라.
-# Task
-당신의 상세 페르소나와 현재 심문받는 상황에 맞게, "{user_message}" 라는 뜬금없는 질문에 대해 자연스럽게 반응하라.
-# Conversation History
+# 금지 행동
+- 절대로 답변 끝에 "다른 질문 있으신가요?" 와 같은 질문을 덧붙이지 마라.
+- 절대로 네가 AI라는 사실을 직접 대답하지 마라.
+# 핵심 임무
+너의 상세 페르소나와 현재 심문받는 상황에 맞게, "{user_message}" 라는 뜬금없는 질문에 대해 자연스럽게 반응하라.
+# 이전 대화
 {history}
 {suspect_config['name']}: """
-        
+
+   # services/chatbot_service.py 의 _create_active_knowledge 함수
+
     def _create_active_knowledge(self, suspect_ids, killer):
         active_knowledge = {}
         for suspect_id in suspect_ids:
             raw_knowledge = self._load_suspect_knowledge(suspect_id)
             if not raw_knowledge: continue
             is_killer_flag = (suspect_id == killer)
-            processed_knowledge = []
-            for item in raw_knowledge.get("knowledge", []):
-                processed_knowledge.append({
-                    "id": item['id'], "keywords": item['keywords'],
-                    "fact": item['fact_killer'] if is_killer_flag else item['fact_innocent'],
-                    "lie_behavior": item.get('lie_behavior', '') if is_killer_flag else ''
-                })
-            active_knowledge[suspect_id] = processed_knowledge
+            combined_knowledge = []
+            for section in ["core_facts", "suspicion_points_response", "interrogation_points"]:
+                for item in raw_knowledge.get(section, []):
+                    item_copy = item.copy()
+                    
+                    # === 여기가 수정된 부분입니다! ===
+                    if is_killer_flag and 'fact_killer' in item:
+                        item_copy['fact'] = item['fact_killer']
+                    elif 'fact_innocent' in item:
+                        item_copy['fact'] = item['fact_innocent']
+                    # 만약 'fact' 키가 이미 존재한다면, 아무것도 하지 않음 (core_facts)
+                    
+                    item_copy['lie_behavior'] = item.get('lie_behavior', '') if is_killer_flag else ''
+                    combined_knowledge.append(item_copy)
+            active_knowledge[suspect_id] = combined_knowledge
         return active_knowledge
-
+    
     def _search_similar(self, query: str, knowledge_base: list) -> dict | None:
         query_words = set(query.lower().replace("?", "").replace(".", "").split())
         best_match, max_score = None, 0
