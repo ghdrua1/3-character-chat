@@ -94,6 +94,7 @@ class ChatbotService:
             import traceback; traceback.print_exc()
             return {"reply": "죄송합니다. 생각에 잠시 오류가 생긴 것 같습니다...", "sender": suspect_id}
 
+
     def make_accusation(self, accused_suspect_id: str) -> dict:
         real_killer_id = self.game_session["killer"]
         is_correct = (accused_suspect_id == real_killer_id)
@@ -101,24 +102,42 @@ class ChatbotService:
         final_prompt = ""
         sender_id = accused_suspect_id
         
+        # === 여기가 수정된 부분입니다! ===
         if is_correct:
             killer_config = self._load_suspect_config(real_killer_id)
+            # 페르소나 정보를 프롬프트에 추가
+            persona_str = "\n".join([f"- {key}: {value}" for key, value in killer_config.get("persona_details", {}).items()])
+            
             final_prompt = f"""
 # Master Instruction
 당신은 마침내 정체가 탄로난 범인 '{killer_config['name']}'입니다. 탐정 'Adrian Vale'이 당신의 모든 거짓말을 꿰뚫어보고, 당신을 범인으로 지목했습니다. 더 이상 빠져나갈 길이 없습니다.
-# Persona
+
+# Your Detailed Persona (당신의 상세 페르소나)
+{persona_str}
+
+# Current Situation (현재 상황 및 지시)
 {killer_config['system_prompt_killer']}
+
 # Task
-탐정이 당신을 범인으로 지목한 이 마지막 순간, 당신의 페르소나에 맞춰 모든 것을 자백하는 극적인 최종 변론을 하세요. 왜 피해자를 죽여야만 했는지, 당신의 동기를 절절하게 토로하며 대사를 마무리하세요."""
+탐정이 당신을 범인으로 지목한 이 마지막 순간, 당신의 상세 페르소나에 맞춰 모든 것을 자백하는 극적인 최종 변론을 하세요. 왜 피해자를 죽여야만 했는지, 당신의 동기를 절절하게 토로하며 대사를 마무리하세요."""
         else:
             innocent_config = self._load_suspect_config(accused_suspect_id)
             killer_config = self._load_suspect_config(real_killer_id)
             sender_id = "system" 
+            
+            # 페르소나 정보를 프롬프트에 추가
+            innocent_persona_str = "\n".join([f"- {key}: {value}" for key, value in innocent_config.get("persona_details", {}).items()])
+            
             final_prompt = f"""
 # Master Instruction
 당신은 뛰어난 스토리텔러입니다. 탐정 'Adrian Vale'이 '{innocent_config['name']}'을 범인으로 지목했지만, 틀렸습니다. 진범은 '{killer_config['name']}'입니다.
+
 # Task
-1. 먼저, 억울하게 지목된 '{innocent_config['name']}'의 페르소나({innocent_config['system_prompt_innocent']})에 맞춰, 그의 억울함과 절망이 담긴 짧은 반박 대사를 생성하세요.
+1. 먼저, 억울하게 지목된 '{innocent_config['name']}'의 상세 페르소나를 참고하여, 그의 억울함과 절망이 담긴 짧은 반박 대사를 생성하세요.
+   - 상세 페르소나:
+{innocent_persona_str}
+   - 상황: {innocent_config['system_prompt_innocent']}
+
 2. 이어서, 사건의 진실을 설명하는 나레이션을 작성하세요. 왜 진범이 '{killer_config['name']}'일 수밖에 없었는지, 그의 결정적인 동기와 증거를 언급하며 비극적인 사건의 전말을 서술하세요."""
 
         response = self.client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "user", "content": final_prompt}], temperature=0.8, max_tokens=500)
@@ -130,37 +149,61 @@ class ChatbotService:
             "sender": sender_id,
             "is_game_over": True
         }
-
     def get_recommended_questions(self, suspect_id: str) -> list:
         knowledge = self._load_suspect_knowledge(suspect_id)
         return knowledge.get("recommended_questions", []) if knowledge else []
         
+
     def _build_final_prompt(self, suspect_config, system_prompt, history, user_message, retrieved_doc):
+        persona_str = "\n".join([f"- {key}: {value}" for key, value in suspect_config.get("persona_details", {}).items()])
+
+        # === 여기가 최종 개선된 프롬프트입니다! ===
         if retrieved_doc:
             fact_to_use = retrieved_doc['fact']
             lie_behavior = retrieved_doc['lie_behavior']
-            return f"""# Master Instruction
-당신은 용의자 '{suspect_config['name']}'입니다. 탐정 'Adrian Vale'과 대화하고 있습니다. 역할에 완벽하게 몰입하여, 자연스럽게 대답하세요. 절대로 AI이거나 연기 중이라는 사실을 드러내지 마세요.
-# Persona
+            return f"""
+# Your Core Identity (너의 핵심 정체성)
+- Your Name: {suspect_config['name']}
+- Your Detailed Persona:
+{persona_str}
+
+# Your Current Situation (너의 현재 상황)
 {system_prompt}
-# Internal Monologue (연기 지침 - 절대로 입 밖에 내지 말 것)
-- 당신이 알고 있는 사실 또는 거짓말: "{fact_to_use}"
-- 만약 범인이라면, 거짓말을 들키지 않기 위한 행동 지침: "{lie_behavior}"
+
+# Prohibited Actions (금지 행동)
+- 절대로 답변 끝에 "다른 질문이 있으신가요?" 와 같은 질문을 덧붙이지 마라.
+- 절대로 당신이 AI이거나 연기 중이라는 사실을 드러내지 마라.
+
+# Primary Task (가장 중요한 임무)
+- 아래 'Conversation'에 주어진 탐정의 마지막 질문에 대해 답변해야 한다.
+- 답변의 핵심 내용(What to say)은 반드시 아래 'Internal Monologue'에 있는 정보를 기반으로 해야 한다.
+- 너의 'Persona'는 이 내용을 어떻게 말할지(How to say)를 결정한다.
+
+# Internal Monologue (너의 속마음 - 절대로 그대로 말하지 말고, 연기의 바탕으로만 삼을 것)
+- Fact or Lie to use: "{fact_to_use}"
+- If you are the killer, your deceptive behavior instruction: "{lie_behavior}"
+
 # Conversation
 {history}
 {suspect_config['name']}: """
         else:
+            # (RAG 실패 시 프롬프트는 이전과 동일하게 유지해도 좋습니다)
             return f"""
-# Master Instruction
-당신은 용의자 '{suspect_config['name']}'입니다. 탐정 'Adrian Vale'과 대화하고 있습니다. 그런데 탐정이 사건과 관련 없어 보이는 뜬금없는 질문을 던졌습니다.
-# Persona
+# Your Core Identity (너의 핵심 정체성)
+- Your Name: {suspect_config['name']}
+- Your Detailed Persona:
+{persona_str}
+# Your Current Situation (너의 현재 상황)
 {system_prompt}
+# Prohibited Actions (금지 행동)
+- 절대로 답변 끝에 "다른 질문이 있으신가요?" 와 같은 질문을 덧붙이지 마라.
+- 절대로 당신이 AI이거나 연기 중이라는 사실을 드러내지 마라.
 # Task
-당신의 성격과 현재 심문받는 상황에 맞게, 뜬금없는 질문에 대해 자연스럽게 반응하세요. 질문의 의도를 되묻거나, 당황하거나, 불쾌감을 표시할 수 있습니다. 절대로 질문 자체에 대해 친절하게 설명해주지 마세요.
-# Conversation
+당신의 상세 페르소나와 현재 심문받는 상황에 맞게, "{user_message}" 라는 뜬금없는 질문에 대해 자연스럽게 반응하라.
+# Conversation History
 {history}
 {suspect_config['name']}: """
-
+        
     def _create_active_knowledge(self, suspect_ids, killer):
         active_knowledge = {}
         for suspect_id in suspect_ids:
