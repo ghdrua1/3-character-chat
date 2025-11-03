@@ -20,7 +20,8 @@ class ChatbotService:
         self.game_session = {}
         self.start_new_game()
         print("[ChatbotService] 초기화 완료. 새로운 게임이 준비되었습니다.")
-    
+# services/chatbot_service.py 파일에서 아래 두 함수를 교체하세요.
+
     def start_new_game(self):
         suspect_ids = ['leonard', 'walter', 'clara']
         killer = random.choice(suspect_ids)
@@ -28,30 +29,40 @@ class ChatbotService:
         if nathan_script is None:
             self.game_session = {"mode": "error", "error_message": "Nathan script not found."}
             return
-        clues = nathan_script.get('clues', {}).get(killer, {})
+        
+        # 'clues' 전체를 세션에 저장하도록 수정
+        clues = nathan_script.get('clues', {})
         active_knowledge = self._create_active_knowledge(suspect_ids, killer)
         self.game_session = {
             "killer": killer, "clues": clues, "nathan_script": nathan_script,
             "active_knowledge": active_knowledge, "history": {s_id: [] for s_id in suspect_ids},
-            "mode": "briefing", "questions_left": 15
+            "mode": "briefing", "questions_left": 15,
+            "mid_report_done": False # 중간 보고를 했는지 여부를 추적하는 플래그
         }
-        print(f"--- 새로운 게임 시작 ---")
-        print(f"이번 사건의 범인은 '{killer}' 입니다.")
-
-# services/chatbot_service.py 파일에서 generate_response 함수를 아래 코드로 교체하세요.
+        print(f"--- 새로운 게임 시작 --- 범인은 '{killer}' 입니다.")
 
     def generate_response(self, user_message: str, suspect_id: str = None) -> dict:
-        # 'init' 메시지는 특별 처리
         if user_message.strip().lower() == "init":
-            # _handle_briefing은 questions_left를 반환하지 않으므로, 여기서 직접 추가해줍니다.
-            response = self._handle_briefing(user_message)
-            response['questions_left'] = self.game_session.get('questions_left', 15)
-            response['mode'] = self.game_session.get('mode')
-            return response
-
+            return self._handle_briefing(user_message)
+        
         current_mode = self.game_session.get("mode")
-        handler_result = {} # 각 핸들러의 결과(reply, sender)를 저장할 임시 변수
-
+        
+        # 중간 보고 트리거 로직
+        if current_mode == "interrogation" and self.game_session.get("questions_left") == 8 and not self.game_session.get("mid_report_done"):
+            self.game_session["mid_report_done"] = True
+            killer = self.game_session["killer"]
+            lead_in = self.game_session["clues"]["common"]["mid-game_lead"]
+            mid_clue = self.game_session["clues"][killer]["mid-game_clue"]
+            nathan_report = f"{lead_in}\n\n[결정적 단서]: {mid_clue}"
+            
+            # 중간 보고는 질문 횟수를 차감하지 않음
+            return {
+                "reply": nathan_report, "sender": "nathan",
+                "questions_left": self.game_session.get("questions_left"),
+                "mode": current_mode
+            }
+        
+        handler_result = {}
         if current_mode == "error":
             handler_result = {"reply": f"게임 초기화 오류: {self.game_session.get('error_message')}", "sender": "system"}
         elif current_mode == "briefing":
@@ -60,31 +71,31 @@ class ChatbotService:
             if not suspect_id:
                 handler_result = {"reply": "심문할 용의자를 선택해 주십시오.", "sender": "system"}
             else:
-                # _handle_interrogation 함수가 실행되면, 내부적으로 질문 횟수가 차감됩니다.
                 handler_result = self._handle_interrogation(user_message, suspect_id)
         else:
              handler_result = {"reply": "게임 모드 설정에 오류가 발생했습니다.", "sender": "system"}
         
-        # 모든 로직이 끝난 후, 최종적으로 업데이트된 세션 정보를 바탕으로 응답을 구성합니다.
         final_response = {
-            "reply": handler_result.get("reply"),
-            "sender": handler_result.get("sender"),
+            "reply": handler_result.get("reply"), "sender": handler_result.get("sender"),
             "questions_left": self.game_session.get("questions_left", 0),
             "mode": self.game_session.get("mode")
         }
         return final_response
+# services/chatbot_service.py 파일에서 _handle_briefing 함수를 아래 코드로 교체하세요.
+
     def _handle_briefing(self, user_message: str) -> dict:
         script = self.game_session["nathan_script"]["briefing"]
         if user_message.strip().lower() == "init":
             return {"reply": script["intro"], "sender": "nathan"}
         if any(keyword in user_message for keyword in ["알겠습니다", "알겠", "시작"]):
             self.game_session["mode"] = "interrogation"
-            initial_clue = self.game_session["clues"]["initial"]
-            reply = f"좋습니다, 탐정님. 첫 번째 단서를 드리죠.\n\n[단서]: {initial_clue}"
+            # 'common' 섹션에서 초기 단서를 가져오도록 수정
+            initial_clue = self.game_session["clues"]["common"]["initial"]
+            reply = f"좋습니다, 탐정님. 첫 수사 방향을 알려드리죠.\n\n[정보]: {initial_clue}"
             reply += script["start_interrogation"]
             return {"reply": reply, "sender": "nathan"}
         return {"reply": script["default"], "sender": "nathan"}
-
+    
     def _handle_interrogation(self, user_message: str, suspect_id: str) -> dict:
         try:
             if self.game_session["questions_left"] <= 0:
@@ -258,34 +269,76 @@ class ChatbotService:
             
             is_killer_flag = (suspect_id == killer)
             
-            # === 여기가 최종 업그레이드된 부분입니다! ===
             combined_knowledge = []
-            # 이제 세 개의 모든 섹션을 순회하며 지식을 통합합니다.
-            for section in ["core_facts", "suspicion_points_response", "interrogation_points"]:
+            # === 여기가 최종 업그레이드된 부분입니다! ===
+            # 이제 'alibi_timeline' 섹션까지 포함하여 모든 지식을 통합합니다.
+            for section in ["core_facts", "alibi_timeline", "suspicion_points_response", "interrogation_points"]:
                 for item in raw_knowledge.get(section, []):
                     item_copy = item.copy()
                     
-                    # 'fact_innocent'/'fact_killer'가 있는 경우와 'fact'만 있는 경우를 모두 처리
                     if is_killer_flag and 'fact_killer' in item:
                         item_copy['fact'] = item['fact_killer']
                     elif 'fact_innocent' in item:
                         item_copy['fact'] = item['fact_innocent']
-                    # 'fact' 키가 이미 존재한다면 (core_facts), 아무것도 하지 않음
                     
                     item_copy['lie_behavior'] = item.get('lie_behavior', '') if is_killer_flag else ''
                     combined_knowledge.append(item_copy)
             
             active_knowledge[suspect_id] = combined_knowledge
         return active_knowledge
+    
+# services/chatbot_service.py 의 _search_similar 함수
+
     def _search_similar(self, query: str, knowledge_base: list) -> dict | None:
-        query_words = set(query.lower().replace("?", "").replace(".", "").split())
-        best_match, max_score = None, 0
+        """
+        사용자의 질문(query)에서 '시간'과 '일반 키워드'를 모두 추출하여,
+        가장 적합한 knowledge 문서를 찾는 지능형 검색 함수.
+        """
+        query_lower = query.lower()
+        query_words = set(query_lower.replace("?", "").replace(".", "").split())
+        
+        # === 여기가 업그레이드된 부분입니다! (시간 키워드 인식) ===
+        time_keywords_map = {
+            "11시 30분": ["11시 30분", "열한시 삼십분", "막차 시간"],
+            "11시 40분": ["11시 40분", "열한시 사십분"],
+            "11시 50분": ["11시 50분", "열한시 오십분", "사건 시각", "그 시간", "그때"]
+        }
+
+        detected_time = None
+        for time_key, variations in time_keywords_map.items():
+            for var in variations:
+                if var in query_lower:
+                    detected_time = time_key
+                    break
+            if detected_time:
+                break
+        # =======================================================
+
+        best_match = None
+        max_score = 0
+
         for doc in knowledge_base:
             doc_keywords = set(k.lower() for k in doc.get("keywords", []))
-            score = len(query_words.intersection(doc_keywords))
+            
+            score = 0
+            # 1. 일반 키워드 점수 계산
+            score += len(query_words.intersection(doc_keywords))
+            
+            # 2. 시간 키워드가 일치하면 매우 높은 점수 부여
+            if detected_time and detected_time in " ".join(doc_keywords):
+                score += 10 # 시간 일치에 높은 가중치
+
             if score > max_score:
-                max_score, best_match = score, doc
-        return best_match if max_score > 0 else None
+                max_score = score
+                best_match = doc
+        
+        # 1점 이상일 때만 유효한 검색으로 인정
+        if max_score > 0:
+            print(f"[DEBUG] RAG 검색 성공: '{query}' -> doc_id: {best_match.get('id')}, score: {max_score}")
+            return best_match
+            
+        print(f"[DEBUG] RAG 검색 실패: '{query}'")
+        return None
 
     def _get_conversation_history(self, suspect_id: str, current_user_message: str, limit: int = 4) -> str:
         history = self.game_session["history"][suspect_id][-limit:]
