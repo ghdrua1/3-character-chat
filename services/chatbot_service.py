@@ -38,25 +38,41 @@ class ChatbotService:
         print(f"--- 새로운 게임 시작 ---")
         print(f"이번 사건의 범인은 '{killer}' 입니다.")
 
+# services/chatbot_service.py 파일에서 generate_response 함수를 아래 코드로 교체하세요.
+
     def generate_response(self, user_message: str, suspect_id: str = None) -> dict:
+        # 'init' 메시지는 특별 처리
         if user_message.strip().lower() == "init":
-            return self._handle_briefing(user_message)
+            # _handle_briefing은 questions_left를 반환하지 않으므로, 여기서 직접 추가해줍니다.
+            response = self._handle_briefing(user_message)
+            response['questions_left'] = self.game_session.get('questions_left', 15)
+            response['mode'] = self.game_session.get('mode')
+            return response
+
         current_mode = self.game_session.get("mode")
-        questions_left = self.game_session.get("questions_left", 0)
-        response = {"questions_left": questions_left, "mode": current_mode}
+        handler_result = {} # 각 핸들러의 결과(reply, sender)를 저장할 임시 변수
+
         if current_mode == "error":
-            response.update({"reply": f"게임 초기화 오류: {self.game_session.get('error_message')}", "sender": "system"})
+            handler_result = {"reply": f"게임 초기화 오류: {self.game_session.get('error_message')}", "sender": "system"}
         elif current_mode == "briefing":
-            response.update(self._handle_briefing(user_message))
+            handler_result = self._handle_briefing(user_message)
         elif current_mode == "interrogation":
             if not suspect_id:
-                response.update({"reply": "심문할 용의자를 선택해 주십시오.", "sender": "system"})
+                handler_result = {"reply": "심문할 용의자를 선택해 주십시오.", "sender": "system"}
             else:
-                response.update(self._handle_interrogation(user_message, suspect_id))
+                # _handle_interrogation 함수가 실행되면, 내부적으로 질문 횟수가 차감됩니다.
+                handler_result = self._handle_interrogation(user_message, suspect_id)
         else:
-             response.update({"reply": "게임 모드 설정에 오류가 발생했습니다.", "sender": "system"})
-        return response
-
+             handler_result = {"reply": "게임 모드 설정에 오류가 발생했습니다.", "sender": "system"}
+        
+        # 모든 로직이 끝난 후, 최종적으로 업데이트된 세션 정보를 바탕으로 응답을 구성합니다.
+        final_response = {
+            "reply": handler_result.get("reply"),
+            "sender": handler_result.get("sender"),
+            "questions_left": self.game_session.get("questions_left", 0),
+            "mode": self.game_session.get("mode")
+        }
+        return final_response
     def _handle_briefing(self, user_message: str) -> dict:
         script = self.game_session["nathan_script"]["briefing"]
         if user_message.strip().lower() == "init":
