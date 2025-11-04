@@ -1,494 +1,393 @@
-"""
-🎯 챗봇 서비스 - 구현 파일
-
-이 파일은 챗봇의 핵심 AI 로직을 담당합니다.
-아래 아키텍처를 참고하여 직접 설계하고 구현하세요.
-
-📐 시스템 아키텍처:
-
-┌─────────────────────────────────────────────────────────┐
-│ 1. 초기화 단계 (ChatbotService.__init__)                  │
-├─────────────────────────────────────────────────────────┤
-│  - OpenAI Client 생성                                    │
-│  - ChromaDB 연결 (벡터 데이터베이스)                       │
-│  - LangChain Memory 초기화 (대화 기록 관리)               │
-│  - Config 파일 로드                                       │
-└─────────────────────────────────────────────────────────┘
-                            ↓
-┌─────────────────────────────────────────────────────────┐
-│ 2. RAG 파이프라인 (generate_response 내부)               │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  사용자 질문 "학식 추천해줘"                              │
-│       ↓                                                  │
-│  [_create_embedding()]                                   │
-│       ↓                                                  │
-│  질문 벡터: [0.12, -0.34, ..., 0.78]  (3072차원)        │
-│       ↓                                                  │
-│  [_search_similar()]  ← ChromaDB 검색                    │
-│       ↓                                                  │
-│  검색 결과: "학식은 곤자가가 맛있어" (유사도: 0.87)        │
-│       ↓                                                  │
-│  [_build_prompt()]                                       │
-│       ↓                                                  │
-│  최종 프롬프트 = 시스템 설정 + RAG 컨텍스트 + 질문        │
-└─────────────────────────────────────────────────────────┘
-                            ↓
-┌─────────────────────────────────────────────────────────┐
-│ 3. LLM 응답 생성                                         │
-├─────────────────────────────────────────────────────────┤
-│  OpenAI GPT-4 API 호출                                   │
-│       ↓                                                  │
-│  "학식은 곤자가에서 먹는 게 제일 좋아! 돈까스가 인기야"    │
-│       ↓                                                  │
-│  [선택: 이미지 검색]                                      │
-│       ↓                                                  │
-│  응답 반환: {reply: "...", image: "..."}                 │
-└─────────────────────────────────────────────────────────┘
-                            ↓
-┌─────────────────────────────────────────────────────────┐
-│ 4. 메모리 저장 (LangChain Memory)                        │
-├─────────────────────────────────────────────────────────┤
-│  대화 기록에 질문-응답 저장                               │
-│  다음 대화에서 컨텍스트로 활용                            │
-└─────────────────────────────────────────────────────────┘
-
-
-💡 핵심 구현 과제:
-
-1. **Embedding 생성**
-   - OpenAI API를 사용하여 텍스트를 벡터로 변환
-   - 모델: text-embedding-3-large (3072차원)
-
-2. **RAG 검색 알고리즘** ⭐ 가장 중요!
-   - ChromaDB에서 유사 벡터 검색
-   - 유사도 계산: similarity = 1 / (1 + distance)
-   - threshold 이상인 문서만 선택
-
-3. **LLM 프롬프트 설계**
-   - 시스템 프롬프트 (캐릭터 설정)
-   - RAG 컨텍스트 통합
-   - 대화 기록 포함
-
-4. **대화 메모리 관리**
-   - LangChain의 ConversationSummaryBufferMemory 사용
-   - 대화가 길어지면 자동으로 요약
-
-
-📚 참고 문서:
-- ARCHITECTURE.md: 시스템 아키텍처 상세 설명
-- IMPLEMENTATION_GUIDE.md: 단계별 구현 가이드
-- README.md: 프로젝트 개요
-
-
-⚠️ 주의사항:
-- 이 파일의 구조는 가이드일 뿐입니다
-- 자유롭게 재설계하고 확장할 수 있습니다
-- 단, generate_response() 함수 시그니처는 유지해야 합니다
-  (app.py에서 호출하기 때문)
-"""
+# services/chatbot_service.py
 
 import os
+import json
+import random
 from pathlib import Path
 from dotenv import load_dotenv
-import json
+from openai import OpenAI
 
-# 환경변수 로드
 load_dotenv()
-
-# 프로젝트 루트 경로
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-
 class ChatbotService:
-    """
-    챗봇 서비스 클래스
-    
-    이 클래스는 챗봇의 모든 AI 로직을 캡슐화합니다.
-    
-    주요 책임:
-    1. OpenAI API 관리
-    2. ChromaDB 벡터 검색
-    3. LangChain 메모리 관리
-    4. 응답 생성 파이프라인
-    
-    직접 구현해야 할 메서드:
-    - __init__: 모든 구성 요소 초기화
-    - _load_config: 설정 파일 로드
-    - _init_chromadb: 벡터 데이터베이스 초기화
-    - _create_embedding: 텍스트 → 벡터 변환
-    - _search_similar: RAG 검색 수행 (핵심!)
-    - _build_prompt: 프롬프트 구성
-    - generate_response: 최종 응답 생성 (모든 로직 통합)
-    """
-    
     def __init__(self):
-        """
-        챗봇 서비스 초기화
+        print("[ChatbotService] 초기화 중...")
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key or len(api_key) < 10:
+            raise ValueError("OPENAI_API_KEY 환경변수가 유효하지 않습니다. .env 파일을 확인해주세요.")
+        self.client = OpenAI(api_key=api_key)
+        self.game_session = {}
+        self.start_new_game()
+        print("[ChatbotService] 초기화 완료. 새로운 게임이 준비되었습니다.")
+# services/chatbot_service.py 파일에서 아래 두 함수를 교체하세요.
+
+    def start_new_game(self):
+        suspect_ids = ['leonard', 'walter', 'clara']
+        killer = random.choice(suspect_ids)
+        nathan_script = self._load_nathan_script()
+        if nathan_script is None:
+            self.game_session = {"mode": "error", "error_message": "Nathan script not found."}
+            return
         
-        TODO: 다음 구성 요소들을 초기화하세요
-        
-        1. Config 로드
-           - config/chatbot_config.json 파일 읽기
-           - 챗봇 이름, 설명, 시스템 프롬프트 등
-        
-        2. OpenAI Client
-           - API 키: os.getenv("OPENAI_API_KEY")
-           - from openai import OpenAI
-           - self.client = OpenAI(api_key=...)
-        
-        3. ChromaDB
-           - 텍스트 임베딩 컬렉션 연결
-           - 경로: static/data/chatbot/chardb_embedding
-           - self.collection = ...
-        
-        4. LangChain Memory (선택)
-           - ConversationSummaryBufferMemory
-           - 대화 기록 관리
-           - self.memory = ...
-        
-        힌트:
-        - ChromaDB: import chromadb
-        - LangChain: from langchain.memory import ConversationSummaryBufferMemory
-        """
-        print("[ChatbotService] 초기화 중... ")
-        
-        # 여기에 초기화 코드 작성
-        self.config = {}
-        self.client = None
-        self.collection = None
-        self.memory = None
-        
-        print("[ChatbotService] 초기화 완료")
-    
-    
-    def _load_config(self):
-        """
-        설정 파일 로드
-        
-        TODO: config/chatbot_config.json 읽어서 반환
-        
-        반환값 예시:
-        {
-            "name": "김서강",
-            "character": {...},
-            "system_prompt": {...}
+        active_knowledge = self._create_active_knowledge(suspect_ids, killer)
+        # [수정] 불필요한 clues 변수 할당을 제거합니다.
+        self.game_session = {
+            "killer": killer, "nathan_script": nathan_script,
+            "active_knowledge": active_knowledge, "history": {s_id: [] for s_id in suspect_ids},
+            "mode": "briefing", "questions_left": 15,
+            "mid_report_done": False
         }
-        """
-        pass
-    
-    
-    def _init_chromadb(self):
-        """
-        ChromaDB 초기화 및 컬렉션 반환
+        print(f"--- 새로운 게임 시작 --- 범인은 '{killer}' 입니다.")
+    def generate_response(self, user_message: str, suspect_id: str = None) -> dict:
+        if user_message.strip().lower() == "init":
+            return self._handle_briefing(user_message)
         
-        TODO: 
-        1. PersistentClient 생성
-        2. 컬렉션 가져오기 (이름: "rag_collection")
-        3. 컬렉션 반환
+        current_mode = self.game_session.get("mode")
         
-        힌트:
-        - import chromadb
-        - db_path = BASE_DIR / "static/data/chatbot/chardb_embedding"
-        - client = chromadb.PersistentClient(path=str(db_path))
-        - collection = client.get_collection(name="rag_collection")
-        """
-        pass
-    
-    
-    def _create_embedding(self, text: str) -> list:
-        """
-        텍스트를 임베딩 벡터로 변환
-        
-        Args:
-            text (str): 임베딩할 텍스트
-        
-        Returns:
-            list: 3072차원 벡터 (text-embedding-3-large 모델)
-        
-        TODO:
-        1. OpenAI API 호출
-        2. embeddings.create() 사용
-        3. 벡터 반환
-        
-        힌트:
-        - response = self.client.embeddings.create(
-        -     input=[text],
-        -     model="text-embedding-3-large"
-        - )
-        - return response.data[0].embedding
-        """
-        pass
-    
-    
-    def _search_similar(self, query: str, threshold: float = 0.45, top_k: int = 5):
-        """
-        RAG 검색: 유사한 문서 찾기 (핵심 메서드!)
-        
-        Args:
-            query (str): 검색 질의
-            threshold (float): 유사도 임계값 (0.3-0.5 권장)
-            top_k (int): 검색할 문서 개수
-        
-        Returns:
-            tuple: (document, similarity, metadata) 또는 (None, None, None)
-        
-        TODO: RAG 검색 알고리즘 구현
-        
-        1. 쿼리 임베딩 생성
-           query_embedding = self._create_embedding(query)
-        
-        2. ChromaDB 검색
-           results = self.collection.query(
-               query_embeddings=[query_embedding],
-               n_results=top_k,
-               include=["documents", "distances", "metadatas"]
-           )
-        
-        3. 유사도 계산 및 필터링
-           for doc, dist, meta in zip(...):
-               similarity = 1 / (1 + dist)  ← 유사도 공식!
-               if similarity >= threshold:
-                   ...
-        
-        4. 가장 유사한 문서 반환
-           return (best_document, best_similarity, metadata)
-        
-        
-        💡 핵심 개념:
-        
-        - Distance vs Similarity
-          · ChromaDB는 "거리(distance)"를 반환 (작을수록 유사)
-          · 우리는 "유사도(similarity)"로 변환 (클수록 유사)
-          · 변환 공식: similarity = 1 / (1 + distance)
-        
-        - Threshold
-          · 0.3: 매우 느슨한 매칭 (관련성 낮아도 OK)
-          · 0.45: 적당한 매칭 (추천!)
-          · 0.7: 매우 엄격한 매칭 (정확한 답만)
-        
-        - Top K
-          · 5-10개 정도 검색
-          · 그 중 threshold 넘는 것만 사용
-        
-        
-        🐛 디버깅 팁:
-        - print()로 검색 결과 확인
-        - 유사도 값 확인 (너무 낮으면 threshold 조정)
-        - 검색된 문서 내용 확인
-        """
-        pass
-    
-    
-    def _build_prompt(self, user_message: str, context: str = None, username: str = "사용자"):
-        """
-        LLM 프롬프트 구성
-        
-        Args:
-            user_message (str): 사용자 메시지
-            context (str): RAG 검색 결과 (선택)
-            username (str): 사용자 이름
-        
-        Returns:
-            str: 최종 프롬프트
-        
-        TODO:
-        1. 시스템 프롬프트 가져오기 (config에서)
-        2. RAG 컨텍스트 포함 여부 결정
-        3. 대화 기록 포함 (선택)
-        4. 최종 프롬프트 문자열 반환
-        
-        프롬프트 예시:
-        ```
-        당신은 서강대학교 선배 김서강입니다.
-        신입생들에게 학교 생활을 알려주는 역할을 합니다.
-        
-        [참고 정보]  ← RAG 컨텍스트가 있을 때만
-        학식은 곤자가가 맛있어. 돈까스가 인기야.
-        
-        사용자: 학식 추천해줘
-        ```
-        """
-        pass
-    
-    
-    def generate_response(self, user_message: str, username: str = "사용자") -> dict:
-        """
-        사용자 메시지에 대한 챗봇 응답 생성
-        
-        Args:
-            user_message (str): 사용자 입력
-            username (str): 사용자 이름
-        
-        Returns:
-            dict: {
-                'reply': str,       # 챗봇 응답 텍스트
-                'image': str|None   # 이미지 경로 (선택)
-            }
-        
-        
-        TODO: 전체 응답 생성 파이프라인 구현
-        
-        
-        ═══════════════════════════════════════════════════
-        📋 구현 단계
-        ═══════════════════════════════════════════════════
-        
-        [1단계] 초기 메시지 처리
-        
-            if user_message.strip().lower() == "init":
-                # 첫 인사말 반환
-                bot_name = self.config.get('name', '챗봇')
-                return {
-                    'reply': f"안녕! 나는 {bot_name}이야.",
-                    'image': None
-                }
-        
-        
-        [2단계] RAG 검색 수행
-        
-            context, similarity, metadata = self._search_similar(
-                query=user_message,
-                threshold=0.45,
-                top_k=5
-            )
+        # [수정] 범용 이미지 시스템이 적용된 새로운 중간 보고 로직입니다.
+        if current_mode == "interrogation" and self.game_session.get("questions_left") == 8 and not self.game_session.get("mid_report_done"):
+            self.game_session["mid_report_done"] = True
+            killer = self.game_session["killer"]
+            mid_game_script = self.game_session["nathan_script"]["mid_game_report"]
             
-            has_context = (context is not None)
-        
-        
-        [3단계] 프롬프트 구성
-        
-            prompt = self._build_prompt(
-                user_message=user_message,
-                context=context,
-                username=username
-            )
-        
-        
-        [4단계] LLM API 호출
-        
-            response = self.client.chat.completions.create(
-                model="gpt-4o-mini",  # 또는 gpt-4
-                messages=[
-                    {"role": "system", "content": "시스템 프롬프트"},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.7,
-                max_tokens=500
-            )
+            report_part1_text = mid_game_script["lead_in"]
+            report_part2_text = f"{mid_game_script['second_lead_in']}\n\n[결정적 단서]: {mid_game_script[killer]}"
+            nathan_report = f"{report_part1_text}\n{report_part2_text}"
             
-            reply = response.choices[0].message.content
-        
-        
-        [5단계] 메모리 저장 (선택)
-        
-            if self.memory:
-                self.memory.save_context(
-                    {"input": user_message},
-                    {"output": reply}
-                )
-        
-        
-        [6단계] 응답 반환
-        
+            report_image_info = mid_game_script.get("image")
+            
             return {
-                'reply': reply,
-                'image': None  # 이미지 검색 로직 추가 가능
+                "reply": nathan_report, "sender": "nathan", "image": report_image_info,
+                "questions_left": self.game_session.get("questions_left"),
+                "mode": current_mode
             }
         
+        handler_result = {}
+        if current_mode == "error":
+            handler_result = {"reply": f"게임 초기화 오류: {self.game_session.get('error_message')}", "sender": "system"}
+        elif current_mode == "briefing":
+            handler_result = self._handle_briefing(user_message)
+        elif current_mode == "interrogation":
+            if not suspect_id:
+                handler_result = {"reply": "심문할 용의자를 선택해 주십시오.", "sender": "system"}
+            else:
+                handler_result = self._handle_interrogation(user_message, suspect_id)
+        else:
+             handler_result = {"reply": "게임 모드 설정에 오류가 발생했습니다.", "sender": "system"}
         
-        ═══════════════════════════════════════════════════
-        💡 핵심 포인트
-        ═══════════════════════════════════════════════════
+        # [수정] 최종 응답 객체에 image 필드를 항상 포함하여 전달하도록 수정합니다.
+        final_response = {
+            "reply": handler_result.get("reply"), "sender": handler_result.get("sender"),
+            "image": handler_result.get("image"),
+            "questions_left": self.game_session.get("questions_left", 0),
+            "mode": self.game_session.get("mode")
+        }
+        return final_response
+# services/chatbot_service.py 파일에서 _handle_briefing 함수를 아래 코드로 교체하세요.
+
+    def _handle_briefing(self, user_message: str) -> dict:
+        script_briefing = self.game_session["nathan_script"]["briefing"]
         
-        1. RAG 활용
-           - 검색 결과가 있으면 프롬프트에 포함
-           - 없으면 일반 대화 모드
+        if user_message.strip().lower() == "init":
+            return {"reply": script_briefing["intro"], "sender": "nathan"}
         
-        2. 에러 처리
-           - try-except로 API 오류 처리
-           - 실패 시 기본 응답 반환
+        # [수정] '알겠습니다' 입력 시, 상세한 공식 보고서를 생성하는 로직입니다.
+        if any(keyword in user_message for keyword in ["알겠습니다", "알겠", "시작", "네", "계속"]):
+            self.game_session["mode"] = "interrogation"
+            report_script = script_briefing["case_file_report"]
+            full_report = [
+                report_script["header"],
+                report_script["victim_profile"],
+                report_script["scene_overview"],
+                report_script["preliminary_findings"],
+                script_briefing["start_interrogation"]
+            ]
+            final_reply = "\n".join(full_report)
+            return {"reply": final_reply, "sender": "nathan"}
         
-        3. 로깅
-           - 각 단계마다 print()로 상태 출력
-           - 디버깅에 매우 유용!
-        
-        4. 확장성
-           - 이미지 검색 로직 추가 가능
-           - 감정 분석 추가 가능
-           - 다중 언어 지원 가능
-        
-        
-        ═══════════════════════════════════════════════════
-        🐛 디버깅 예시
-        ═══════════════════════════════════════════════════
-        
-        print(f"\n{'='*50}")
-        print(f"[USER] {username}: {user_message}")
-        print(f"[RAG] Context found: {has_context}")
-        if has_context:
-            print(f"[RAG] Similarity: {similarity:.4f}")
-            print(f"[RAG] Context: {context[:100]}...")
-        print(f"[LLM] Calling API...")
-        print(f"[BOT] {reply}")
-        print(f"{'='*50}\n")
-        """
-        
-        # 여기에 전체 파이프라인 구현
-        # 위의 단계를 참고하여 자유롭게 설계하세요
-        
+        return {"reply": script_briefing.get("default", "준비되시면 '알겠습니다'라고 말씀해주십시오."), "sender": "nathan"}
+    def _handle_interrogation(self, user_message: str, suspect_id: str) -> dict:
         try:
-            # 구현 시작
-            pass
+            if self.game_session["questions_left"] <= 0:
+                return {"reply": "더 이상 질문할 수 없습니다. 이제 범인을 지목해야 합니다.", "sender": "system", "image": None}
             
+            is_killer = (self.game_session["killer"] == suspect_id)
+            suspect_config = self._load_suspect_config(suspect_id)
+            knowledge_base = self.game_session["active_knowledge"][suspect_id]
+            
+            retrieved_doc = self._search_similar(user_message, knowledge_base)
+            
+            # [수정] 이미지 '객체'를 통째로 추출합니다.
+            image_info_to_show = retrieved_doc.get("image") if retrieved_doc else None
+            
+            system_prompt = suspect_config['system_prompt_killer'] if is_killer else suspect_config['system_prompt_innocent']
+            history = self._get_conversation_history(suspect_id, user_message)
+            final_prompt = self._build_final_prompt(suspect_config, system_prompt, history, user_message, retrieved_doc)
+            
+            print("======== FINAL PROMPT TO LLM ========"); print(final_prompt); print("=====================================")
+
+            response = self.client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "user", "content": final_prompt}], temperature=0.7, max_tokens=300)
+            reply = response.choices[0].message.content.strip()
+            
+            self.game_session["questions_left"] -= 1
+            self._save_to_history(suspect_id, user_message, reply)
+            
+            # [수정] 최종 반환 객체에 이미지 '객체'를 포함합니다.
+            return {"reply": reply, "sender": suspect_id, "image": image_info_to_show}
         except Exception as e:
-            print(f"[ERROR] 응답 생성 실패: {e}")
-            return {
-                'reply': "죄송해요, 일시적인 오류가 발생했어요. 다시 시도해주세요.",
-                'image': None
-            }
+            import traceback; traceback.print_exc()
+            return {"reply": "죄송합니다. 생각에 잠시 오류가 생긴 것 같습니다...", "sender": suspect_id, "image": None}
+# services/chatbot_service.py 의 make_accusation 함수
 
+    def make_accusation(self, accused_suspect_id: str) -> dict:
+        real_killer_id = self.game_session["killer"]
+        is_correct = (accused_suspect_id == real_killer_id)
+        
+        final_prompt = ""
+        sender_id = accused_suspect_id
+        
+        if is_correct:
+            killer_config = self._load_suspect_config(real_killer_id)
+            # === [수정] 범인의 '자백용' 상세 정보를 knowledge.json에서 가져옴 ===
+            killer_knowledge = self._load_suspect_knowledge(real_killer_id)
+            confession_details = killer_knowledge.get("killer_confession_details", {})
+            
+            persona_str = "\n".join([f"- {key}: {value}" for key, value in killer_config.get("persona_details", {}).items()])
+            final_prompt = f"""
+# 총괄 지시
+너는 마침내 정체가 탄로난 범인 '{killer_config['name']}'이다. 탐정 'Adrian Vale'이 너를 범인으로 지목했다.
+# 너의 상세 페르소나
+{persona_str}
+# 너의 현재 마음가짐
+{killer_config['system_prompt_killer']}
+# 너의 범행 기록 (이 내용을 바탕으로 자백하라)
+- 범행 동기(왜): {confession_details.get('why')}
+- 범행 방식(어떻게): {confession_details.get('how')}
+# 핵심 임무
+탐정이 너를 범인으로 지목한 이 마지막 순간, 너의 페르소나에 맞춰 모든 것을 자백하는 극적인 최종 변론을 하라. 위의 '너의 범행 기록'에 있는 동기와 방식을 반드시 포함하여 절절하게 토로하며 대사를 마무리하라."""
+        else:
+            innocent_config = self._load_suspect_config(accused_suspect_id)
+            killer_config = self._load_suspect_config(real_killer_id)
+            sender_id = "system" 
+            
+            # === [수정] 진범의 '범행 기록'을 knowledge.json에서 가져옴 ===
+            killer_knowledge = self._load_suspect_knowledge(real_killer_id)
+            confession_details = killer_knowledge.get("killer_confession_details", {})
+            
+            innocent_persona_str = "\n".join([f"- {key}: {value}" for key, value in innocent_config.get("persona_details", {}).items()])
+            final_prompt = f"""
+# 총괄 지시
+당신은 사건의 진실을 설명하는 '사건 해설자'이다. 절대로 새로운 이야기를 창작하지 말고, 아래에 주어진 '사실'만을 바탕으로 서술하라.
 
-# ============================================================================
-# 싱글톤 패턴
-# ============================================================================
-# ChatbotService 인스턴스를 앱 전체에서 재사용
-# (매번 새로 초기화하면 비효율적)
+# 상황
+탐정 'Adrian Vale'이 '{innocent_config['name']}'을 범인으로 지목했지만, 틀렸다.
+
+# 핵심 임무
+1. 먼저, 억울하게 지목된 '{innocent_config['name']}'의 페르소나를 참고하여 의 억울함이 담긴 짧은 반박 대사를 생성하라.
+   - 페르소나: {innocent_persona_str}
+   - 상황: {innocent_config['system_prompt_innocent']}
+
+2. 이어서, 아래 주어진 '사건의 진실' 정보를 바탕으로, 담담하고 객관적인 톤의 나레이션을 작성하라.
+   - **사건의 진실 (Fact Sheet):**
+     - 진범: {killer_config['name']}
+     - 진범의 동기(왜): {confession_details.get('why')}
+     - 진범의 범행 방식(어떻게): {confession_details.get('how')}
+"""
+
+        response = self.client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "user", "content": final_prompt}], temperature=0.7, max_tokens=500)
+        final_statement = response.choices[0].message.content.strip()
+
+        return {
+            "result": "success" if is_correct else "failure",
+            "final_statement": final_statement,
+            "sender": sender_id,
+            "is_game_over": True
+        }
+    def get_recommended_questions(self, suspect_id: str) -> list:
+        knowledge = self._load_suspect_knowledge(suspect_id)
+        return knowledge.get("recommended_questions", []) if knowledge else []
+        
+# services/chatbot_service.py 의 _build_final_prompt 함수
+
+    def _build_final_prompt(self, suspect_config, system_prompt, history, user_message, retrieved_doc):
+        persona_str = "\n".join([f"- {key}: {value}" for key, value in suspect_config.get("persona_details", {}).items()])
+        
+        case_brief = f"""
+### 배경 정보
+- 사건: 할로슬랍 스테이션 살인사건
+- 피해자: 기자, Elias Cole
+- 당신의 신분: 위 사건의 용의자 중 한 명"""
+        
+        if retrieved_doc:
+            fact_to_use = retrieved_doc['fact']
+            lie_behavior = retrieved_doc.get('lie_behavior', '')
+            # === 여기가 최종 수정된 프롬프트입니다! ===
+            return f"""{case_brief}
+
+### 너의 프로필
+{persona_str}
+
+### 너의 현재 마음가짐
+{system_prompt}
+
+### 너의 태도 (Attitude)
+- 너는 탐정을 돕는 조력자가 아니다. 너는 **방어적인 용의자**다.
+- 탐정의 질문에 최소한의 정보만 제공하고, 먼저 나서서 추가 정보를 주거나 "도움이 되나요?" 같은 협조적인 질문을 절대 하지 마라.
+- 모든 답변은 너의 페르소나와 현재 상황(결백 또는 범인)에 기반해야 한다.
+
+### 너의 속마음 (비밀 생각 - 절대로 그대로 말하지 말고, 연기의 바탕으로만 삼을 것)
+- 탐정의 질문 "{user_message}"에 대해, 너는 사실 이렇게 알고 있다: "{fact_to_use}"
+- 만약 네가 범인이라면, 거짓말을 들키지 않기 위한 행동 지침: "{lie_behavior}"
+
+### 지시:
+위 '너의 속마음'을 바탕으로, 너의 '프로필'과 '태도'에 맞춰 탐정의 마지막 질문에 대한 답변을 생성하라.
+
+### 대화 내용
+{history}
+{suspect_config['name']}: """
+        else:
+            responses = suspect_config.get("situational_responses", {})
+            greeting_ex = responses.get("greeting", "억울합니다.")
+            accusation_ex = responses.get("accusation", "제가 아닙니다.")
+            irrelevant_ex = responses.get("irrelevant_word", "그게 무슨 상관이죠?")
+
+            return f"""{case_brief}
+
+### 너의 프로필
+{persona_str}
+
+### 너의 현재 마음가짐
+{system_prompt}
+
+### 너의 태도 (Attitude)
+- 너는 탐정을 돕는 조력자가 아니다. 너는 **방어적인 용의자**다.
+- 탐정의 뜬금없는 말에 친절하게 설명해주려 하지 말고, 너의 성격에 맞게 반응하라.
+
+### 너의 성격에 맞는 반응 예시
+- 탐정이 "안녕하세요" 라고 인사했을 때: "{greeting_ex}"
+- 탐정이 "당신이 범인이지?" 라고 공격적으로 물었을 때: "{accusation_ex}"
+- 탐정이 "김치찌개" 라고 뜬금없는 단어를 말했을 때: "{irrelevant_ex}"
+
+### 지시:
+위 예시들을 참고하여, 탐정의 말("{user_message}")에 대한 너의 자연스러운 반응을 생성하라.
+
+### 대화 내용
+{history}
+{suspect_config['name']}: """
+
+# services/chatbot_service.py 의 _create_active_knowledge 함수
+
+    def _create_active_knowledge(self, suspect_ids, killer):
+        active_knowledge = {}
+        for suspect_id in suspect_ids:
+            raw_knowledge = self._load_suspect_knowledge(suspect_id)
+            if not raw_knowledge: continue
+            
+            is_killer_flag = (suspect_id == killer)
+            
+            combined_knowledge = []
+            # === 여기가 최종 업그레이드된 부분입니다! ===
+            # 이제 'alibi_timeline' 섹션까지 포함하여 모든 지식을 통합합니다.
+            for section in ["core_facts", "alibi_timeline", "suspicion_points_response", "interrogation_points"]:
+                for item in raw_knowledge.get(section, []):
+                    item_copy = item.copy()
+                    
+                    if is_killer_flag and 'fact_killer' in item:
+                        item_copy['fact'] = item['fact_killer']
+                    elif 'fact_innocent' in item:
+                        item_copy['fact'] = item['fact_innocent']
+                    
+                    item_copy['lie_behavior'] = item.get('lie_behavior', '') if is_killer_flag else ''
+                    combined_knowledge.append(item_copy)
+            
+            active_knowledge[suspect_id] = combined_knowledge
+        return active_knowledge
+    
+# services/chatbot_service.py 의 _search_similar 함수
+
+    def _search_similar(self, query: str, knowledge_base: list) -> dict | None:
+        """
+        사용자의 질문(query)에서 '시간'과 '일반 키워드'를 모두 추출하여,
+        가장 적합한 knowledge 문서를 찾는 지능형 검색 함수.
+        """
+        query_lower = query.lower()
+        query_words = set(query_lower.replace("?", "").replace(".", "").split())
+        
+        # === 여기가 업그레이드된 부분입니다! (시간 키워드 인식) ===
+        time_keywords_map = {
+            "11시 30분": ["11시 30분", "열한시 삼십분", "막차 시간"],
+            "11시 40분": ["11시 40분", "열한시 사십분"],
+            "11시 50분": ["11시 50분", "열한시 오십분", "사건 시각", "그 시간", "그때"]
+        }
+
+        detected_time = None
+        for time_key, variations in time_keywords_map.items():
+            for var in variations:
+                if var in query_lower:
+                    detected_time = time_key
+                    break
+            if detected_time:
+                break
+        # =======================================================
+
+        best_match = None
+        max_score = 0
+
+        for doc in knowledge_base:
+            doc_keywords = set(k.lower() for k in doc.get("keywords", []))
+            
+            score = 0
+            # 1. 일반 키워드 점수 계산
+            score += len(query_words.intersection(doc_keywords))
+            
+            # 2. 시간 키워드가 일치하면 매우 높은 점수 부여
+            if detected_time and detected_time in " ".join(doc_keywords):
+                score += 10 # 시간 일치에 높은 가중치
+
+            if score > max_score:
+                max_score = score
+                best_match = doc
+        
+        # 1점 이상일 때만 유효한 검색으로 인정
+        if max_score > 0:
+            print(f"[DEBUG] RAG 검색 성공: '{query}' -> doc_id: {best_match.get('id')}, score: {max_score}")
+            return best_match
+            
+        print(f"[DEBUG] RAG 검색 실패: '{query}'")
+        return None
+
+    def _get_conversation_history(self, suspect_id: str, current_user_message: str, limit: int = 4) -> str:
+        history = self.game_session["history"][suspect_id][-limit:]
+        suspect_config = self._load_suspect_config(suspect_id)
+        suspect_name = suspect_config.get("name", "용의자")
+        formatted_history = "\n".join([f"탐정: {turn['user']}\n{suspect_name}: {turn['bot']}" for turn in history])
+        formatted_history += f"\n탐정: {current_user_message}"
+        return formatted_history
+
+    def _save_to_history(self, suspect_id: str, user_message: str, bot_reply: str):
+        self.game_session["history"][suspect_id].append({"user": user_message, "bot": bot_reply})
+
+    def _load_json_file(self, file_path: Path) -> dict | None:
+        if not file_path.exists(): return None
+        try: return json.loads(file_path.read_text(encoding='utf-8'))
+        except: return None
+
+    def _load_nathan_script(self) -> dict:
+        return self._load_json_file(BASE_DIR / "static/data/chatbot/case_files/nathan_hale_script.json")
+
+    def _load_suspect_config(self, suspect_id: str) -> dict:
+        map = {'leonard': 'leonard_graves.json', 'walter': 'walter_briggs.json', 'clara': 'clara_hwang.json'}
+        path = map.get(suspect_id)
+        return self._load_json_file(BASE_DIR / "config" / path) if path else None
+
+    def _load_suspect_knowledge(self, suspect_id: str) -> dict:
+        map = {'leonard': 'leonard_graves', 'walter': 'walter_briggs', 'clara': 'clara_hwang'}
+        path = map.get(suspect_id)
+        return self._load_json_file(BASE_DIR / "static/data/chatbot/chardb_text" / path / "knowledge.json") if path else None
 
 _chatbot_service = None
-
 def get_chatbot_service():
-    """
-    챗봇 서비스 인스턴스 반환 (싱글톤)
-    
-    첫 호출 시 인스턴스 생성, 이후 재사용
-    """
     global _chatbot_service
-    if _chatbot_service is None:
-        _chatbot_service = ChatbotService()
+    if _chatbot_service is None: _chatbot_service = ChatbotService()
     return _chatbot_service
-
-
-# ============================================================================
-# 테스트용 메인 함수
-# ============================================================================
-
-if __name__ == "__main__":
-    """
-    로컬 테스트용
-    
-    실행 방법:
-    python services/chatbot_service.py
-    """
-    print("챗봇 서비스 테스트")
-    print("=" * 50)
-    
-    service = get_chatbot_service()
-    
-    # 초기화 테스트
-    response = service.generate_response("init", "테스터")
-    print(f"초기 응답: {response}")
-    
-    # 일반 대화 테스트
-    response = service.generate_response("안녕하세요!", "테스터")
-    print(f"응답: {response}")

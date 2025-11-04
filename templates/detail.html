@@ -3,184 +3,638 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>{{ bot.name }} - 상세 정보</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR&display=swap"
-      rel="stylesheet"
-    />
+    <title>CASE FILE HSP-042 - The Hollowslop Station</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-      body {
-        margin: 0;
-        padding: 0;
-        font-family: "IBM Plex Sans KR", sans-serif;
-        background: rgba(0, 0, 0, 0.3);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        min-height: 100vh;
+      @font-face {
+        font-family: "RoundedFixedsys";
+        src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_six@1.2/DungGeunMo.woff")
+          format("woff");
+        font-weight: normal;
+        font-style: normal;
+        font-display: swap;
       }
-      .modal-container {
-        max-width: 500px;
-        width: 90%;
-        margin: 20px auto;
-        background: #fff;
-        border-radius: 12px;
-        overflow: hidden;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-      }
-      .modal-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
 
-        padding: 15px 20px;
+      * {
+        box-sizing: border-box;
       }
-      .modal-header h2 {
-        margin: 0;
-        flex: 1;
-        text-align: center;
-        font-size: 1.5rem;
-        color: #333;
+
+      body {
+        font-family: "RoundedFixedsys", ui-monospace, "SFMono-Regular", Menlo,
+          monospace;
+        -webkit-font-smoothing: none;
+        image-rendering: pixelated;
+        background: black;
+        position: relative;
+        overflow-x: hidden;
+        overflow-y: auto;
+        min-height: 100vh;
+        color: #d9d9d3;
       }
-      .close-btn {
-        background: none;
-        border: none;
-        font-size: 1.5rem;
-        cursor: pointer;
-        color: #666;
+
+      /* CRT Scanline effect */
+      .scanline {
+        position: fixed;
+        inset: 0;
+        background: repeating-linear-gradient(
+          to bottom,
+          rgba(0, 0, 0, 0.04) 0px,
+          rgba(0, 0, 0, 0.06) 2px,
+          transparent 4px
+        );
+        pointer-events: none;
+        z-index: 100;
       }
-      .modal-content {
-        padding: 30px;
+
+      .desk-overlay {
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(
+          circle at center top,
+          #3b3a35,
+          transparent 60%
+        );
+        pointer-events: none;
       }
-      .bot-image {
-        width: 100%;
-        max-width: 300px;
-        height: auto;
-        border-radius: 12px;
-        display: block;
-        margin: 0 auto 20px;
+
+      /* Flicker animation for CRT feel */
+      @keyframes flicker {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.98;
+        }
       }
-      .bot-info {
-        text-align: center;
+
+      .crt-flicker {
+        animation: flicker 3s infinite;
       }
-      .bot-info h1 {
-        margin: 0 0 15px 0;
-        font-size: 2rem;
-        color: #333;
+
+      /* Blinking cursor */
+      @keyframes blink {
+        0%,
+        50% {
+          opacity: 1;
+        }
+        51%,
+        100% {
+          opacity: 0;
+        }
       }
-      .bot-info p {
-        margin: 15px 0;
-        font-size: 1rem;
-        color: #666;
-        line-height: 1.6;
+
+      .blink {
+        animation: blink 1s infinite;
       }
-      .tags {
-        margin: 15px 0;
+
+      /* Fade light pulse effect */
+      .fade-light {
+        background: radial-gradient(
+          circle at center,
+          rgba(255, 255, 255, 0.06) 0%,
+          transparent 70%
+        );
+        animation: pulse 6s ease-in-out infinite;
       }
-      .tag {
+
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 0.2;
+        }
+        50% {
+          opacity: 0.5;
+        }
+      }
+
+      /* Typewriter cursor */
+      .typewriter-cursor {
         display: inline-block;
-        background: #e0e0e0;
-        color: #555;
-        padding: 6px 12px;
-        border-radius: 15px;
-        margin: 4px;
-        font-size: 0.9rem;
+        width: 2px;
+        height: 1.2em;
+        background: #8b1e2d;
+        margin-left: 2px;
+        animation: blink 1s infinite;
+        vertical-align: baseline;
       }
-      .username-area {
-        margin: 20px 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 10px;
+
+      /* Hide sections initially */
+      .section-hidden {
+        display: none;
       }
-      .username-area label {
-        font-size: 1rem;
-        color: #333;
+
+      /* Quote styling */
+      .quote {
+        color: #8b1e2d;
+        font-style: italic;
+        padding: 1rem;
+        border-left: 3px solid #8b1e2d;
+        margin: 1.5rem 0;
+        background: rgba(139, 30, 45, 0.1);
       }
-      .username-area input {
-        padding: 8px 12px;
-        font-size: 1rem;
-        border: 2px solid #ddd;
-        border-radius: 8px;
-        width: 50%;
-        transition: border 0.2s;
+
+      /* Code/case file styling */
+      .code {
+        color: rgba(255, 255, 255, 0.6);
+        font-size: 4rem;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
       }
-      .username-area input:focus {
-        outline: none;
-        border-color: #764ba2;
-      }
-      .start-chat {
-        display: block;
-        margin: 20px 0;
-        padding: 12px 20px;
-        background: #764ba2;
-        color: #fff;
-        text-decoration: none;
-        border-radius: 8px;
-        font-size: 1.1rem;
-        text-align: center;
+
+      /* Stamp button animation */
+      .stamp-btn {
+        color: #ead9d9;
+        background: #8b1e2d;
+        border: none;
+        padding: 12px 24px;
+        font-family: "RoundedFixedsys", monospace;
+        transform: scale(0.95) rotate(-1deg);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
         cursor: pointer;
-        transition: transform 0.2s;
+        text-transform: uppercase;
+        font-size: 1rem;
+        letter-spacing: 0.1em;
       }
-      .start-chat:hover {
-        transform: translateY(-2px);
+
+      .stamp-btn:hover {
+        transform: scale(1) rotate(0);
+        box-shadow: 0 0 20px rgba(139, 30, 45, 0.5);
+      }
+
+      .stamp-btn:active {
+        transform: scale(0.98) rotate(0);
+      }
+
+      /* Typewriter text container */
+      .typewriter-text {
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        line-height: 1.8;
+        min-height: 1.8em; /* Reserve space to prevent layout shift */
+      }
+
+      /* Hidden text for maintaining layout during typing */
+      .hidden-char {
+        visibility: hidden;
+        display: inline;
+        width: auto;
+        height: auto;
+        line-height: 1.8 !important; /* Match typewriter-text line-height */
+        font-size: inherit;
+        font-family: inherit;
+        letter-spacing: inherit;
+        word-spacing: inherit;
+        vertical-align: baseline;
+      }
+
+      /* When revealed, maintain same line-height */
+      .typewriter-text span:not(.hidden-char):not(.typewriter-cursor) {
+        line-height: 1.8 !important;
+        display: inline;
+        vertical-align: baseline;
+      }
+
+      /* Ensure layout stability */
+      .typewriter-container {
+        display: inline-block;
+        min-width: 0;
+        width: 100%;
+      }
+
+      /* Fade in animation */
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .fade-in {
+        animation: fadeIn 0.5s ease-in forwards;
+        opacity: 0;
+      }
+
+      /* 2D Indie Game Style Speech Bubble */
+      .speech-bubble {
+        position: relative;
+        background: #1c1c1a;
+        border: none;
+        border-radius: 0;
+        padding: 1.5rem 2rem;
+        margin: 2rem auto;
+        max-width: 800px;
+      }
+
+      /* Detective Image Container */
+      .detective-container {
+        position: fixed;
+        top: 40%;
+        left: 2rem;
+        transform: translateY(-50%);
+        z-index: 50;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .detective-container.section-hidden {
+        display: none !important;
+      }
+
+      .detective-image {
+        width: 300px;
+        height: 300px;
+        border-radius: 0;
+        object-fit: cover;
+      }
+
+      /* Main content adjustment for fixed detective image */
+      .main-content {
+        margin-left: 0;
+      }
+
+      @media (min-width: 1025px) {
+        .main-content {
+          margin-left: 240px;
+        }
+      }
+
+      /* Intro section - always centered regardless of main-content margin */
+      #intro {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 100%;
+        max-width: 100%;
+        z-index: 30;
+      }
+
+      @media (max-width: 1024px) {
+        .detective-container {
+          position: relative;
+          top: auto;
+          left: auto;
+          transform: none;
+          margin: 2rem 0;
+        }
+
+        #intro {
+          position: relative;
+          left: auto;
+          transform: none;
+        }
+      }
+
+      /* 2D Indie Game Style Button */
+      .indie-btn {
+        background: #1c1c1a;
+        border: none;
+        color: #d9d9d3;
+        padding: 12px 24px;
+        font-family: "RoundedFixedsys", monospace;
+        font-size: 1rem;
+        cursor: pointer;
+        text-transform: none;
+        letter-spacing: 0.05em;
+        transition: all 0.1s ease;
+        margin: 1rem 0;
+      }
+
+      .indie-btn:hover {
+        opacity: 0.8;
+      }
+
+      .indie-btn:active {
+        opacity: 0.6;
+      }
+
+      /* Responsive adjustments */
+      @media (max-width: 640px) {
+        .paper-texture {
+          padding: 1.5rem !important;
+        }
+
+        .speech-bubble {
+          padding: 1rem 1.5rem;
+          margin: 1rem auto;
+        }
+
+        .detective-image {
+          width: 150px;
+          height: 150px;
+        }
       }
     </style>
   </head>
-  <body>
-    <div class="modal-container">
-      <div class="modal-header">
-        <h2>{{ bot.name }}</h2>
-        <button
-          class="close-btn"
-          onclick="window.location.href='{{ url_for('index') }}'"
+  <body class="crt-flicker">
+    <!-- Scanline overlay -->
+    <div class="desk-overlay"></div>
+    <div class="scanline"></div>
+
+    <!-- Fade light effect -->
+    <div class="fade-light fixed inset-0 pointer-events-none z-10"></div>
+
+    <!-- Detective Image Container - Fixed position -->
+    <div
+      id="detective-image-container"
+      class="detective-container section-hidden"
+    >
+      <img
+        src="/static/images/example.png"
+        alt="Adrian Vale"
+        class="detective-image"
+        onerror="this.style.display='none'"
+      />
+    </div>
+
+    <!-- Main content -->
+    <div
+      class="relative flex flex-col items-center justify-center min-h-screen p-4 sm:p-6 md:p-8 z-20 main-content"
+    >
+      <!-- Intro section: CASE FILE -->
+      <section id="intro" class="text-center mb-8">
+        <p id="case-file-text" class="code text-sm sm:text-base md:text-[40px]">
+          <span class="typewriter-cursor"></span>
+        </p>
+      </section>
+
+      <!-- Section 1: Detective Context -->
+      <section
+        id="detective-section"
+        class="paper-texture rounded-sm px-6 py-8 sm:px-8 sm:py-10 md:px-12 md:py-12 max-w-3xl w-full mb-8 section-hidden"
+      >
+        <div
+          id="detective-content"
+          class="typewriter-text text-[#d9d9d3] text-sm sm:text-base md:text-lg leading-relaxed space-y-6"
         >
-          &times;
-        </button>
-      </div>
-
-      <div class="modal-content">
-        <img
-          src="./static/images/hateslop/logo_black_genai.png"
-          alt="{{ bot.name }}"
-          class="bot-image"
-        />
-
-        <div class="bot-info">
-          <h1>{{ bot.name }}</h1>
-
-          <div class="tags">
-            {% for tag in bot.tags %}
-            <span class="tag">{{ tag }}</span>
-            {% endfor %}
-          </div>
+          <!-- Content will be typed here -->
         </div>
 
-        <div class="username-area">
-          <label for="username">이름:</label>
-          <input type="text" id="username" placeholder="이름을 입력하세요" />
+        <!-- Next button -->
+        <div class="text-center mt-8">
+          <button
+            id="next-btn"
+            class="indie-btn section-hidden"
+            onclick="showCaseSection()"
+          >
+            &lt; 다음으로
+          </button>
+        </div>
+      </section>
+
+      <!-- Section 2: Case Context -->
+      <section
+        id="case-section"
+        class="paper-texture rounded-sm px-6 py-8 sm:px-8 sm:py-10 md:px-12 md:py-12 max-w-3xl w-full mb-8 section-hidden"
+      >
+        <div id="case-content" class="space-y-6">
+          <!-- Content will be typed here -->
         </div>
 
-        <a href="#" class="start-chat" id="start-chat-btn">채팅 시작하기</a>
-      </div>
+        <!-- Start button -->
+        <div class="text-center mt-8">
+          <button
+            id="start-btn"
+            class="stamp-btn section-hidden"
+            onclick="window.location.href='/chat'"
+          >
+            OPEN CASE FILE
+          </button>
+        </div>
+      </section>
     </div>
 
     <script>
-      const startChatBtn = document.getElementById("start-chat-btn");
-      const usernameInput = document.getElementById("username");
+      // Typewriter function
+      function typeText(element, text, speed = 50, callback = null) {
+        // Clear element
+        element.innerHTML = "";
 
-      startChatBtn.addEventListener("click", function (event) {
-        event.preventDefault();
-        const username = usernameInput.value.trim() || "사용자";
-        window.location.href = `/chat?username=${encodeURIComponent(username)}`;
-      });
+        // Pre-create all text nodes with hidden characters to prevent layout shift
+        const textNodes = [];
+        const cursor = document.createElement("span");
+        cursor.className = "typewriter-cursor";
+        cursor.style.display = "inline-block";
 
-      usernameInput.addEventListener("keypress", function (event) {
-        if (event.key === "Enter") {
-          startChatBtn.click();
+        // Create all text nodes first (hidden)
+        for (let j = 0; j < text.length; j++) {
+          if (text[j] === "\n") {
+            textNodes.push({
+              node: document.createElement("br"),
+              isNewline: true,
+            });
+          } else {
+            const textNode = document.createTextNode(text[j]);
+            const span = document.createElement("span");
+            span.className = "hidden-char";
+            span.style.display = "inline";
+            span.style.lineHeight = "1.8";
+            span.style.verticalAlign = "baseline";
+            span.appendChild(textNode);
+            textNodes.push({ node: span, isNewline: false });
+          }
         }
+
+        // Append all hidden text at once to establish layout
+        textNodes.forEach((item) => element.appendChild(item.node));
+
+        // Insert cursor at the start (will be moved as we type)
+        if (textNodes.length > 0) {
+          element.insertBefore(cursor, textNodes[0].node);
+        } else {
+          element.appendChild(cursor);
+        }
+
+        // Force layout recalculation once
+        element.offsetHeight;
+
+        // Now reveal characters one by one and move cursor
+        let charIndex = 0;
+        function typeChar() {
+          if (charIndex < textNodes.length) {
+            const item = textNodes[charIndex];
+
+            if (item.isNewline) {
+              // BR is already visible, move cursor to after it
+              charIndex++;
+              if (charIndex < textNodes.length) {
+                const nextItem = textNodes[charIndex];
+                if (cursor.parentNode) {
+                  cursor.parentNode.insertBefore(cursor, nextItem.node);
+                }
+              } else {
+                // Last item, cursor goes to end
+                if (cursor.parentNode) {
+                  cursor.parentNode.appendChild(cursor);
+                }
+              }
+              setTimeout(typeChar, speed);
+            } else {
+              // First reveal the current character
+              item.node.classList.remove("hidden-char");
+              item.node.style.visibility = "visible";
+              // Ensure line-height and other text properties remain consistent
+              item.node.style.display = "inline";
+              item.node.style.verticalAlign = "baseline";
+              item.node.style.lineHeight = "1.8";
+
+              // Then move cursor to after this revealed character
+              charIndex++;
+              if (charIndex < textNodes.length) {
+                const nextItem = textNodes[charIndex];
+                if (cursor.parentNode) {
+                  cursor.parentNode.insertBefore(cursor, nextItem.node);
+                }
+              } else {
+                // Last character, cursor goes to end
+                if (cursor.parentNode) {
+                  cursor.parentNode.appendChild(cursor);
+                }
+              }
+
+              setTimeout(typeChar, speed);
+            }
+          } else {
+            // Remove cursor after typing completes
+            if (cursor.parentNode) {
+              cursor.parentNode.removeChild(cursor);
+            }
+            if (callback) callback();
+          }
+        }
+
+        // Start typing after a brief delay to ensure layout is established
+        setTimeout(typeChar, 10);
+      }
+
+      // Show next section
+      function showCaseSection() {
+        const detectiveSection = document.getElementById("detective-section");
+        const caseSection = document.getElementById("case-section");
+
+        detectiveSection.classList.add("section-hidden");
+        caseSection.classList.remove("section-hidden");
+
+        const caseContent = document.getElementById("case-content");
+        const caseTexts = [
+          "도시 외곽의 노후화된 간이역 '할로슬랍 스테이션'.\n",
+          "한때는 지역 교통의 중심이었지만, 신도심 개발과 함께 이용객이 급감해 한 달 뒤 공식 폐역 예정이다.\n",
+          "지금은 하루 두 대의 완행열차만 정차하며, 역무원도 단 한 명만 남아 근무 중이다. 대부분의 시민들은 이미 새 역을 이용하고, 이곳을 찾는 건 습관처럼 남은 몇몇 사람들뿐.",
+          '<p class="text-[#ef4444] mt-4">그러던 지난 자정, 경찰에 의해 할로슬랍 스테이션 플랫폼 3에서 23:50에 사망한 걸로 보이는 피해자의 사체를 발견했다.</p>',
+        ];
+
+        let currentIndex = 0;
+        const contentContainer = document.createElement("div");
+        contentContainer.className =
+          "typewriter-text text-[#d9d9d3] text-sm sm:text-base md:text-lg leading-relaxed";
+        caseContent.innerHTML = "";
+        caseContent.appendChild(contentContainer);
+
+        function typeNextText() {
+          if (currentIndex < caseTexts.length) {
+            const textElement = document.createElement("div");
+            textElement.className = "mb-4";
+            contentContainer.appendChild(textElement);
+
+            const text = caseTexts[currentIndex];
+            if (text.includes("<p")) {
+              // If it's HTML, just append it
+              setTimeout(() => {
+                contentContainer.removeChild(textElement);
+                contentContainer.innerHTML += text;
+                currentIndex++;
+                setTimeout(typeNextText, 500);
+              }, 100);
+            } else {
+              // Type it out
+              typeText(textElement, text, 50, () => {
+                currentIndex++;
+                setTimeout(typeNextText, 500);
+              });
+            }
+          } else {
+            // Show start button
+            setTimeout(() => {
+              const startBtn = document.getElementById("start-btn");
+              startBtn.classList.remove("section-hidden");
+              startBtn.classList.add("fade-in");
+            }, 500);
+          }
+        }
+
+        typeNextText();
+      }
+
+      // Initialize
+      document.addEventListener("DOMContentLoaded", function () {
+        // Type intro
+        typeText(
+          document.getElementById("case-file-text"),
+          "CASE FILE HSP-042...",
+          200,
+          () => {
+            // Show detective section after intro (2 second delay)
+            setTimeout(() => {
+              const introSection = document.getElementById("intro");
+              const detectiveSection =
+                document.getElementById("detective-section");
+              const detectiveImageContainer = document.getElementById(
+                "detective-image-container"
+              );
+
+              introSection.classList.add("section-hidden");
+              detectiveSection.classList.remove("section-hidden");
+              detectiveImageContainer.classList.remove("section-hidden");
+
+              // Start typing detective context
+              const detectiveContent =
+                document.getElementById("detective-content");
+
+              const detectiveTexts = [
+                "당신은 Adrian Vale. 런던 경찰청 범죄행동분석과에서 10년을 보낸 후, 지금은 프리랜서 범죄심리 전문 탐정으로 활동하고 있다.\n\n",
+                '언론에서는 당신을 "The Analyst"라고 부른다. 복잡한 인간 심리를 읽어내는 능력으로 여러 국제 사건에 협력해왔다.\n\n',
+                "할로슬롭 지역에서 살인 사건이 발생했다.\n",
+                "경찰이 처리하기엔 피해자가 전국지소속의 영향력 있는 기자였기 때문에, 외부 시선과 정치적 부담이 컸다. 따라서 경찰청은 당신에게 비공식 협조를 요청했다.\n\n",
+                "당신이 늘 그랬듯이, 사건을 해결해보자.",
+              ];
+              let currentIndex = 0;
+              const contentContainer = document.createElement("div");
+              contentContainer.className =
+                "typewriter-text text-[#d9d9d3] text-sm sm:text-base md:text-lg leading-relaxed";
+              detectiveContent.innerHTML = "";
+              detectiveContent.appendChild(contentContainer);
+
+              function typeNextText() {
+                if (currentIndex < detectiveTexts.length) {
+                  const textElement = document.createElement("div");
+                  textElement.className = "mb-4";
+                  contentContainer.appendChild(textElement);
+
+                  const text = detectiveTexts[currentIndex];
+                  // Type it out
+                  typeText(textElement, text, 50, () => {
+                    currentIndex++;
+                    setTimeout(typeNextText, 500);
+                  });
+                } else {
+                  // Show next button after typing completes
+                  setTimeout(() => {
+                    const nextBtn = document.getElementById("next-btn");
+                    nextBtn.classList.remove("section-hidden");
+                    nextBtn.classList.add("fade-in");
+                  }, 500);
+                }
+              }
+
+              typeNextText();
+            }, 2000);
+          }
+        );
       });
     </script>
   </body>
