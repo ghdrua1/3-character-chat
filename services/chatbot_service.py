@@ -167,7 +167,7 @@ class ChatbotService:
 탐정 'Adrian Vale'이 '{innocent_config['name']}'을 범인으로 지목했지만, 틀렸다.
 
 # 핵심 임무
-1. 먼저, 억울하게 지목된 '{innocent_config['name']}'의 페르소나를 참고하여 그의 억울함이 담긴 짧은 반박 대사를 생성하라.
+1. 먼저, 억울하게 지목된 '{innocent_config['name']}'의 페르소나를 참고하여 의 억울함이 담긴 짧은 반박 대사를 생성하라.
    - 페르소나: {innocent_persona_str}
    - 상황: {innocent_config['system_prompt_innocent']}
 
