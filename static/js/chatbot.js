@@ -152,18 +152,25 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function handleServerResponse(data) {
-    // 서버 응답에서 'image' 객체를 추출합니다.
-    const { reply, sender, questions_left, mode, image } = data;
-    // appendMessage에 'image' 객체를 세 번째 인자로 전달합니다.
-    appendMessage(sender || "bot", reply, image);
+    const { reply, sender, image, messages, nathan_report, questions_left, mode } = data;
 
-    if (mode) {
-      currentGameMode = mode;
+    // 'messages' 배열이 오면, 그걸 순서대로 전부 보여줍니다.
+    if (messages && Array.isArray(messages)) {
+      for (const msg of messages) {
+        appendMessage(msg.sender, msg.reply, msg.image);
+      }
+    } else if (reply) {
+      // 'messages'가 없으면, 기존처럼 단일 메시지를 보여줍니다.
+      appendMessage(sender, reply, image);
     }
 
-    if (questions_left !== undefined) {
-      updateQuestionsLeftUI(questions_left);
+    // 중간 보고는 위와 독립적으로 처리됩니다.
+    if (nathan_report) {
+      appendMessage(nathan_report.sender, nathan_report.reply, nathan_report.image);
     }
+    
+    if (mode) { currentGameMode = mode; }
+    if (questions_left !== undefined) { updateQuestionsLeftUI(questions_left); }
   }
 
   function updateQuestionsLeftUI(count) {
@@ -256,7 +263,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 
         img.style.maxHeight = "400px"; // 이미지의 최대 높이를 400px로 제한합니다.
         img.style.objectFit = "contain"; // 이미지가 비율을 유지하며 컨테이너 안에 맞춰지도록 설정합니다.
-        
+
         img.style.borderRadius = "8px";
         img.style.marginBottom = "8px";
         img.style.cursor = "pointer";

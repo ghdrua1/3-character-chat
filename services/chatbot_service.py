@@ -75,43 +75,45 @@ class ChatbotService:
                 handler_result = self._handle_interrogation(user_message, suspect_id)
         else:
              handler_result = {"reply": "게임 모드 설정에 오류가 발생했습니다.", "sender": "system"}
+
+
+        # [최종 수정] _handle_briefing이 반환한 'messages' 배열을 처리합니다.
+        if 'messages' in handler_result:
+            final_response = {
+                "messages": handler_result.get("messages")
+            }
+        else:
+            final_response = {
+                "reply": handler_result.get("reply"),
+                "sender": handler_result.get("sender"),
+                "image": handler_result.get("image")
+            }
         
-        # [수정] 최종 응답 객체에 image 필드를 항상 포함하여 전달하도록 수정합니다.
-        final_response = {
-            "reply": handler_result.get("reply"), "sender": handler_result.get("sender"),
-            "image": handler_result.get("image"),
-            "questions_left": self.game_session.get("questions_left", 0),
-            "mode": self.game_session.get("mode")
-        }
+        # 공통 상태 정보를 추가합니다.
+        final_response["questions_left"] = self.game_session.get("questions_left", 0)
+        final_response["mode"] = self.game_session.get("mode")
+            
         return final_response
 # services/chatbot_service.py 파일에서 _handle_briefing 함수를 아래 코드로 교체하세요.
 
     def _handle_briefing(self, user_message: str) -> dict:
         script_briefing = self.game_session["nathan_script"]["briefing"]
         
+        # init 요청 시, 네이선 자기소개 장면(scenes)을 보냅니다.
         if user_message.strip().lower() == "init":
-            return {"reply": script_briefing["intro"], "sender": "nathan"}
+            initial_scenes = script_briefing.get("scenes", [])
+            return { "messages": initial_scenes }
         
-        # [수정] '알겠습니다' 입력 시, 상세한 공식 보고서를 생성하는 로직입니다.
-        if any(keyword in user_message for keyword in ["알겠습니다", "알겠", "시작", "네", "계속"]):
+        # '알겠습니다' 요청 시, 상세 보고 장면(report_scenes)을 보냅니다.
+        if any(keyword in user_message.lower() for keyword in ["알겠습니다", "알겠", "시작", "네", "계속"]):
             self.game_session["mode"] = "interrogation"
-            report_script = script_briefing["case_file_report"]
-            full_report = [
-                report_script["header"],
-                report_script["victim_profile"],
-                report_script["scene_overview"],
-                report_script["preliminary_findings"],
-                script_briefing["start_interrogation"]
-            ]
             
-            final_reply = "\n".join(full_report)
+            report_scenes_array = script_briefing.get("report_scenes", [])
+            
+            return { "messages": report_scenes_array }
 
-            # [수정] briefing 섹션에서 report_image를 가져옵니다.
-            report_image_info = script_briefing.get("report_image")
-            
-            return {"reply": final_reply, "sender": "nathan", "image":report_image_info}
-        
-        return {"reply": script_briefing.get("default", "준비되시면 '알겠습니다'라고 말씀해주십시오."), "sender": "nathan"}
+        # 위 조건에 해당하지 않으면, 단일 메시지를 반환합니다.
+        return {"reply": "준비되시면 '알겠습니다'라고 말씀해주십시오.", "sender": "nathan"}
     
     
     def _handle_interrogation(self, user_message: str, suspect_id: str) -> dict:
