@@ -24,7 +24,7 @@
           monospace;
         -webkit-font-smoothing: none;
         image-rendering: pixelated;
-        background: #0e0f10;
+        background: black;
         position: relative;
         overflow-x: hidden;
         overflow-y: auto;
@@ -44,6 +44,17 @@
         );
         pointer-events: none;
         z-index: 100;
+      }
+
+      .desk-overlay {
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(
+          circle at center top,
+          #3b3a35,
+          transparent 60%
+        );
+        pointer-events: none;
       }
 
       /* Flicker animation for CRT feel */
@@ -75,14 +86,6 @@
 
       .blink {
         animation: blink 1s infinite;
-      }
-
-      /* Paper texture */
-      .paper-texture {
-        background: url("/static/images/texture-1.png"),
-          linear-gradient(0deg, #1c1c1a, #141514);
-        background-blend-mode: multiply;
-        opacity: 0.92;
       }
 
       /* Fade light pulse effect */
@@ -224,13 +227,13 @@
         border-radius: 0;
         padding: 1.5rem 2rem;
         margin: 2rem auto;
-        max-width: 600px;
+        max-width: 800px;
       }
 
       /* Detective Image Container */
       .detective-container {
         position: fixed;
-        top: 50%;
+        top: 40%;
         left: 2rem;
         transform: translateY(-50%);
         z-index: 50;
@@ -244,15 +247,9 @@
       }
 
       .detective-image {
-        width: 200px;
-        height: 200px;
-        background: #2c2c29;
+        width: 300px;
+        height: 300px;
         border-radius: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        box-shadow: 4px 4px 0 #000, inset -2px -2px 0 rgba(255, 255, 255, 0.1);
-        image-rendering: pixelated;
         object-fit: cover;
       }
 
@@ -336,6 +333,7 @@
   </head>
   <body class="crt-flicker">
     <!-- Scanline overlay -->
+    <div class="desk-overlay"></div>
     <div class="scanline"></div>
 
     <!-- Fade light effect -->
@@ -524,12 +522,10 @@
 
         const caseContent = document.getElementById("case-content");
         const caseTexts = [
-          "도시 외곽의 노후화된 간이역 '할로슬랍 스테이션'.\n\n",
+          "도시 외곽의 노후화된 간이역 '할로슬랍 스테이션'.\n",
           "한때는 지역 교통의 중심이었지만, 신도심 개발과 함께 이용객이 급감해 한 달 뒤 공식 폐역 예정이다.\n",
-          "지금은 하루 두 대의 완행열차만 정차하며, 역무원도 단 한 명만 남아 근무 중이다.\n",
-          "밤이 되면 대합실의 불이 꺼지고, 플랫폼엔 간헐적으로 깜박이는 조명과 바람 소리만 남는다.\n",
-          "대부분의 시민들은 이미 새 역을 이용하고, 이곳을 찾는 건 습관처럼 남은 몇몇 사람들뿐.\n",
-          '<p class="text-[#8b5cf6] mt-4">그러던 지난 자정, 경찰에 의해 할로슬랍 스테이션 플랫폼 3에서 23:50에 사망한 걸로 보이는 피해자의 사체를 발견했다.</p>',
+          "지금은 하루 두 대의 완행열차만 정차하며, 역무원도 단 한 명만 남아 근무 중이다. 대부분의 시민들은 이미 새 역을 이용하고, 이곳을 찾는 건 습관처럼 남은 몇몇 사람들뿐.",
+          '<p class="text-[#ef4444] mt-4">그러던 지난 자정, 경찰에 의해 할로슬랍 스테이션 플랫폼 3에서 23:50에 사망한 걸로 보이는 피해자의 사체를 발견했다.</p>',
         ];
 
         let currentIndex = 0;
@@ -606,7 +602,6 @@
                 "경찰이 처리하기엔 피해자가 전국지소속의 영향력 있는 기자였기 때문에, 외부 시선과 정치적 부담이 컸다. 따라서 경찰청은 당신에게 비공식 협조를 요청했다.\n\n",
                 "당신이 늘 그랬듯이, 사건을 해결해보자.",
               ];
-
               let currentIndex = 0;
               const contentContainer = document.createElement("div");
               contentContainer.className =

@@ -1,102 +1,403 @@
 <!DOCTYPE html>
 <html lang="ko">
-<head>
+  <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>12시의 기차역 - The Hollowslop Station</title>
     <style>
-        @font-face {
-            font-family: 'RoundedFixedsys';
-            src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_six@1.2/DungGeunMo.woff') format('woff');
-            font-weight: normal;
-            font-display: swap;
+      @font-face {
+        font-family: "RoundedFixedsys";
+        src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_six@1.2/DungGeunMo.woff")
+          format("woff");
+        font-weight: normal;
+        font-display: swap;
+      }
+
+      * {
+        border: none;
+        outline: none;
+      }
+      * {
+        font-family: "RoundedFixedsys", monospace;
+      }
+      body {
+        margin: 0;
+        background-color: #1a1a1a;
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+      }
+      .header {
+        background-color: #2d2d2d;
+        border-bottom: 3px solid #3a3a3a;
+        padding: 15px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .header-title {
+        font-size: 1.2em;
+        color: #fff;
+        text-shadow: 2px 2px 0 #000;
+      }
+      .game-info {
+        font-size: 0.9em;
+        color: #ccc;
+      }
+      .chat-container {
+        display: flex;
+        flex: 1;
+        overflow: hidden;
+      }
+      .sidebar {
+        width: 280px;
+        background-color: #2d2d2d;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+      }
+      .suspect-tabs {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-bottom: 20px;
+      }
+      .suspect-tab {
+        padding: 15px;
+        background-color: #3a3a3a;
+        color: #fff;
+        cursor: pointer;
+        text-align: center;
+        transition: all 0.1s;
+      }
+      .suspect-tab:hover {
+        background-color: #4a4a4a;
+        transform: translateY(2px);
+      }
+      .suspect-tab.active {
+        background-color: #848a6b;
+        color: #fff;
+        border-color: #fff;
+      }
+      .recommendations {
+ 
+        margin-top: 10px;
+        
+      }
+      .recommendations h3 {
+        font-size: 1em;
+        margin-bottom: 10px;
+        color: #fff;
+        text-shadow: 1px 1px 0 #000;
+        line-height: 1.5;
+      }
+      #recommended-questions-container {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        height: 350px;
+        overflow-y: scroll;
+      }
+      .reco-btn {
+        background-color: #3a3a3a;
+        color: #fff;
+        padding: 10px;
+        cursor: pointer;
+        text-align: left;
+        font-size: 0.85em;
+        line-height: 1.5;
+        width: 100%;
+        transition: all 0.1s;
+      }
+      .reco-btn:hover {
+        background-color: #4a4a4a;
+        transform: translateY(1px);
+        box-shadow: 0 1px 0 #000;
+      }
+      .main-chat {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        background-color: #1a1a1a;
+      }
+      #chat-log {
+        flex: 1;
+        padding: 20px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+      }
+      .message {
+        max-width: 70%;
+        padding: 10px 15px;
+        margin-bottom: 10px;
+        line-height: 1.5;
+        word-break: break-word;
+      }
+      .message.user {
+        background-color: #4a6b8a;
+        align-self: flex-end;
+        margin-left: auto;
+        color: #fff;
+      }
+      .message.bot {
+        background-color: #3a3a3b;
+        align-self: flex-start;
+        color: #fff;
+      }
+      .sender-name {
+        font-weight: normal;
+        font-size: 0.9em;
+        margin-bottom: 4px;
+        color: #fff;
+        text-shadow: 1px 1px 0 #000;
+      }
+      .chat-input-area {
+        display: flex;
+        padding: 15px;
+        background-color: #2d2d2d;
+      }
+      #user-message {
+        flex: 1;
+        padding: 10px 15px;
+        background-color: #3a3a3a;
+        color: #fff;
+        box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.5);
+        font-size: 1em;
+      }
+      #send-btn {
+        background-color: #4a4a4a;
+        color: #fff;
+        width: 45px;
+        height: 45px;
+        font-size: 1.2em;
+        cursor: pointer;
+        margin-left: 10px;
+        transition: all 0.1s;
+      }
+      #send-btn:hover {
+        background-color: #5a5a5a;
+        transform: translateY(2px);
+        box-shadow: 0 2px 0 #000;
+      }
+      #send-btn:active {
+        transform: translateY(4px);
+        box-shadow: 0 0 0 #000;
+      }
+      #accusation-section {
+        margin-top: auto;
+        padding-top: 20px;
+        width: 100%;
+        height: 100px;
+      }
+      #accuse-btn {
+        background-color: #8b0000;
+        color: white;
+        width: 100%;
+        padding: 15px;
+        border: 3px solid #000;
+        box-shadow: 0 4px 0 #000;
+        font-size: 1.1em;
+        font-weight: normal;
+        cursor: pointer;
+        display: none;
+        transition: all 0.1s;
+      }
+      #accuse-btn:hover {
+        background-color: #a00000;
+        transform: translateY(2px);
+        box-shadow: 0 2px 0 #000;
+      }
+      #accuse-btn:active {
+        transform: translateY(4px);
+        box-shadow: 0 0 0 #000;
+      }
+      #accuse-modal {
+        display: none;
+        position: fixed;
+        z-index: 1000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.8);
+        justify-content: center;
+        align-items: center;
+      }
+      .modal-content {
+        background-color: #2d2d2d;
+        padding: 30px;
+        border: 3px solid #000;
+        box-shadow: 0 8px 0 #000;
+        text-align: center;
+      }
+      .modal-content h2 {
+        margin-top: 0;
+        color: #fff;
+        text-shadow: 2px 2px 0 #000;
+      }
+      .modal-content p {
+        color: #ccc;
+      }
+      #suspect-selection {
+        display: flex;
+        gap: 15px;
+        margin-top: 20px;
+        justify-content: center;
+      }
+      .suspect-select-btn {
+        padding: 15px 30px;
+        font-size: 1em;
+        cursor: pointer;
+        border: 3px solid #000;
+        background-color: #3a3a3a;
+        color: #fff;
+        box-shadow: 0 4px 0 #000;
+        transition: all 0.1s;
+      }
+      .suspect-select-btn:hover {
+        background-color: #4a4a4a;
+        transform: translateY(2px);
+        box-shadow: 0 2px 0 #000;
+      }
+      .suspect-select-btn:active {
+        transform: translateY(4px);
+        box-shadow: 0 0 0 #000;
+        background-color: #e4e6bd;
+      }
+      .suspect-info-card {
+        background-color: #383a2e;
+        border: 3px solid #b5ad8c;
+        color: #c2b280;
+        box-shadow: 0 4px 0 #000;
+        padding: 20px;
+        margin-bottom: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+      }
+      .suspect-info-header {
+        display: flex;
+        gap: 20px;
+        align-items: flex-start;
+      }
+      .suspect-info-image {
+        width: 120px;
+        height: 120px;
+        border: 3px solid #000;
+        box-shadow: 0 3px 0 #000;
+        flex-shrink: 0;
+        object-fit: cover;
+        image-rendering: pixelated;
+      }
+      .suspect-info-details {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .suspect-info-name {
+        font-size: 1.4em;
+        margin-bottom: 5px;
+        color: #e0d7b6;
+      }
+      .suspect-info-item {
+        font-size: 0.95em;
+        line-height: 1.6;
+      }
+      .suspect-info-item strong {
+        margin-right: 8px;
+      }
+      .suspect-info-description {
+        border-top: 2px solid #b5ad8c;
+        padding-top: 15px;
+        line-height: 1.6;
+        font-size: 0.9em;
+      }
+      @media (max-width: 768px) {
+        .sidebar {
+          width: 100%;
+          border-right: none;
+          border-bottom: 3px solid #000;
         }
-        * {
-            font-family: 'RoundedFixedsys', monospace;
+        .chat-container {
+          flex-direction: column;
         }
-        body { margin: 0; background-color: #1a1a1a; display: flex; flex-direction: column; height: 100vh; }
-        .header { background-color: #2d2d2d; padding: 15px 20px; border-bottom: 3px solid #000; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 0 #000; }
-        .header-title { font-size: 1.2em; color: #fff; text-shadow: 2px 2px 0 #000; }
-        .game-info { font-size: 0.9em; color: #ccc; }
-        .chat-container { display: flex; flex: 1; overflow: hidden; }
-        .sidebar { width: 280px; background-color: #2d2d2d; border-right: 3px solid #000; padding: 20px; display: flex; flex-direction: column; }
-        .suspect-tabs { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
-        .suspect-tab { padding: 15px; border: 3px solid #000; background-color: #3a3a3a; color: #fff; cursor: pointer; text-align: center; transition: all 0.1s; box-shadow: 0 4px 0 #000; }
-        .suspect-tab:hover { background-color: #4a4a4a; transform: translateY(2px); box-shadow: 0 2px 0 #000; }
-        .suspect-tab.active { background-color: #000; color: #fff; border-color: #fff; }
-        .recommendations { margin-top: 10px; }
-        .recommendations h3 { font-size: 1em; margin-bottom: 10px; color: #fff; text-shadow: 1px 1px 0 #000; }
-        #recommended-questions-container { display: flex; flex-direction: column; gap: 8px; }
-        .reco-btn { background-color: #3a3a3a; border: 2px solid #000; box-shadow: 0 2px 0 #000; color: #fff; padding: 10px; cursor: pointer; text-align: left; font-size: 0.85em; width: 100%; transition: all 0.1s; }
-        .reco-btn:hover { background-color: #4a4a4a; transform: translateY(1px); box-shadow: 0 1px 0 #000; }
-        .main-chat { flex: 1; display: flex; flex-direction: column; background-color: #1a1a1a; }
-        #chat-log { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column;}
-        .message { max-width: 70%; padding: 10px 15px; border: 3px solid #000; margin-bottom: 10px; line-height: 1.5; word-break: break-word; box-shadow: 0 3px 0 #000; }
-        .message.user { background-color: #4a6b8a; align-self: flex-end; margin-left: auto; color: #fff; }
-        .message.bot { background-color: #3a3a3a; align-self: flex-start; color: #fff; }
-        .sender-name { font-weight: normal; font-size: 0.9em; margin-bottom: 4px; color: #fff; text-shadow: 1px 1px 0 #000; }
-        .chat-input-area { display: flex; padding: 15px; background-color: #2d2d2d; border-top: 3px solid #000; }
-        #user-message { flex: 1; padding: 10px 15px; border: 3px solid #000; background-color: #3a3a3a; color: #fff; box-shadow: inset 0 2px 4px rgba(0,0,0,0.5); font-size: 1em; }
-        #send-btn { background-color: #4a4a4a; color: #fff; border: 3px solid #000; box-shadow: 0 4px 0 #000; width: 45px; height: 45px; font-size: 1.2em; cursor: pointer; margin-left: 10px; transition: all 0.1s; }
-        #send-btn:hover { background-color: #5a5a5a; transform: translateY(2px); box-shadow: 0 2px 0 #000; }
-        #send-btn:active { transform: translateY(4px); box-shadow: 0 0 0 #000; }
-        #accusation-section { margin-top: auto; padding-top: 20px; border-top: 2px solid #000; }
-        #accuse-btn { background-color: #8b0000; color: white; width: 100%; padding: 15px; border: 3px solid #000; box-shadow: 0 4px 0 #000; font-size: 1.1em; font-weight: normal; cursor: pointer; display: none; transition: all 0.1s; }
-        #accuse-btn:hover { background-color: #a00000; transform: translateY(2px); box-shadow: 0 2px 0 #000; }
-        #accuse-btn:active { transform: translateY(4px); box-shadow: 0 0 0 #000; }
-        #accuse-modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); justify-content: center; align-items: center; }
-        .modal-content { background-color: #2d2d2d; padding: 30px; border: 3px solid #000; box-shadow: 0 8px 0 #000; text-align: center; }
-        .modal-content h2 { margin-top: 0; color: #fff; text-shadow: 2px 2px 0 #000; }
-        .modal-content p { color: #ccc; }
-        #suspect-selection { display: flex; gap: 15px; margin-top: 20px; justify-content: center; }
-        .suspect-select-btn { padding: 15px 30px; font-size: 1em; cursor: pointer; border: 3px solid #000; background-color: #3a3a3a; color: #fff; box-shadow: 0 4px 0 #000; transition: all 0.1s; }
-        .suspect-select-btn:hover { background-color: #4a4a4a; transform: translateY(2px); box-shadow: 0 2px 0 #000; }
-        .suspect-select-btn:active { transform: translateY(4px); box-shadow: 0 0 0 #000; }
+        .suspect-tabs {
+          flex-direction: row;
+          overflow-x: auto;
+        }
+        .suspect-info-header {
+          flex-direction: column;
+          align-items: center;
+          text-align: center;
+        }
+        .suspect-info-image {
+          width: 100px;
+          height: 100px;
+        }
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
     <header class="header">
-        <div class="header-title">{{ bot_name }}</div>
-        <div class="game-info">남은 질문: <span id="questions-left-display">15</span>회</div>
+      <div class="header-title">{{ bot_name }}</div>
+      <div class="game-info">
+        남은 질문: <span id="questions-left-display">15</span>회
+      </div>
     </header>
     <div class="chat-container" data-username="{{ username }}">
-        <aside class="sidebar">
-            <div class="suspect-tabs">
-                <div class="suspect-tab" data-suspect-id="leonard">Leonard Graves</div>
-                <div class="suspect-tab" data-suspect-id="walter">Walter Briggs</div>
-                <div class="suspect-tab" data-suspect-id="clara">Clara Hwang</div>
-            </div>
-            <div class="recommendations">
-                <h3>추천 질문</h3>
-                <div id="recommended-questions-container"></div>
-            </div>
-            <!-- === [STEP 4] 변경점: 범인 지목 버튼 추가 === -->
-            <div id="accusation-section">
-                <button id="accuse-btn">범인 지목하기</button>
-            </div>
-        </aside>
-        <main class="main-chat">
-            <div id="chat-log"></div>
-            <div class="chat-input-area">
-                <input type="text" id="user-message" placeholder="메시지를 입력하세요..." autocomplete="off">
-                <button id="send-btn">→</button>
-            </div>
-        </main>
+      <aside class="sidebar">
+        <div class="suspect-tabs">
+          <div class="suspect-tab" data-suspect-id="leonard">
+            Leonard Graves
+          </div>
+          <div class="suspect-tab" data-suspect-id="walter">Walter Briggs</div>
+          <div class="suspect-tab" data-suspect-id="clara">Clara Hwang</div>
+        </div>
+        <div class="recommendations">
+          <h3>추천 질문</h3>
+          <div id="recommended-questions-container"></div>
+        </div>
+        <!-- === [STEP 4] 변경점: 범인 지목 버튼 추가 === -->
+        <div id="accusation-section">
+          <button id="accuse-btn">범인 지목하기</button>
+        </div>
+      </aside>
+
+      <main class="main-chat">
+        <div id="chat-log"></div>
+        <div class="chat-input-area">
+          <input
+            type="text"
+            id="user-message"
+            placeholder="메시지를 입력하세요..."
+            autocomplete="off"
+          />
+          <button id="send-btn">→</button>
+        </div>
+      </main>
     </div>
 
     <!-- === [STEP 4] 변경점: 범인 지목 모달 UI 추가 === -->
-    <div id="accuse-modal" style="display: none;">
-        <div class="modal-content">
-            <h2>범인은... 바로 당신이야!</h2>
-            <p>누구를 범인으로 지목하시겠습니까?</p>
-            <div id="suspect-selection">
-                <button class="suspect-select-btn" data-suspect-id="leonard">Leonard</button>
-                <button class="suspect-select-btn" data-suspect-id="walter">Walter</button>
-                <button class="suspect-select-btn" data-suspect-id="clara">Clara</button>
-            </div>
+    <div id="accuse-modal" style="display: none">
+      <div class="modal-content">
+        <h2>범인은... 바로 당신이야!</h2>
+        <p>누구를 범인으로 지목하시겠습니까?</p>
+        <div id="suspect-selection">
+          <button class="suspect-select-btn" data-suspect-id="leonard">
+            Leonard
+          </button>
+          <button class="suspect-select-btn" data-suspect-id="walter">
+            Walter
+          </button>
+          <button class="suspect-select-btn" data-suspect-id="clara">
+            Clara
+          </button>
         </div>
+      </div>
     </div>
 
     <script src="{{ url_for('static', filename='js/chatbot.js') }}"></script>
-</body>
+  </body>
 </html>
