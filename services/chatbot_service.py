@@ -30,34 +30,35 @@ class ChatbotService:
             self.game_session = {"mode": "error", "error_message": "Nathan script not found."}
             return
         
-        # 'clues' 전체를 세션에 저장하도록 수정
-        clues = nathan_script.get('clues', {})
         active_knowledge = self._create_active_knowledge(suspect_ids, killer)
+        # [수정] 불필요한 clues 변수 할당을 제거합니다.
         self.game_session = {
-            "killer": killer, "clues": clues, "nathan_script": nathan_script,
+            "killer": killer, "nathan_script": nathan_script,
             "active_knowledge": active_knowledge, "history": {s_id: [] for s_id in suspect_ids},
             "mode": "briefing", "questions_left": 15,
-            "mid_report_done": False # 중간 보고를 했는지 여부를 추적하는 플래그
+            "mid_report_done": False
         }
         print(f"--- 새로운 게임 시작 --- 범인은 '{killer}' 입니다.")
-
     def generate_response(self, user_message: str, suspect_id: str = None) -> dict:
         if user_message.strip().lower() == "init":
             return self._handle_briefing(user_message)
         
         current_mode = self.game_session.get("mode")
         
-        # 중간 보고 트리거 로직
+        # [수정] 범용 이미지 시스템이 적용된 새로운 중간 보고 로직입니다.
         if current_mode == "interrogation" and self.game_session.get("questions_left") == 8 and not self.game_session.get("mid_report_done"):
             self.game_session["mid_report_done"] = True
             killer = self.game_session["killer"]
-            lead_in = self.game_session["clues"]["common"]["mid-game_lead"]
-            mid_clue = self.game_session["clues"][killer]["mid-game_clue"]
-            nathan_report = f"{lead_in}\n\n[결정적 단서]: {mid_clue}"
+            mid_game_script = self.game_session["nathan_script"]["mid_game_report"]
             
-            # 중간 보고는 질문 횟수를 차감하지 않음
+            report_part1_text = mid_game_script["lead_in"]
+            report_part2_text = f"{mid_game_script['second_lead_in']}\n\n[결정적 단서]: {mid_game_script[killer]}"
+            nathan_report = f"{report_part1_text}\n{report_part2_text}"
+            
+            report_image_info = mid_game_script.get("image")
+            
             return {
-                "reply": nathan_report, "sender": "nathan",
+                "reply": nathan_report, "sender": "nathan", "image": report_image_info,
                 "questions_left": self.game_session.get("questions_left"),
                 "mode": current_mode
             }
@@ -75,8 +76,10 @@ class ChatbotService:
         else:
              handler_result = {"reply": "게임 모드 설정에 오류가 발생했습니다.", "sender": "system"}
         
+        # [수정] 최종 응답 객체에 image 필드를 항상 포함하여 전달하도록 수정합니다.
         final_response = {
             "reply": handler_result.get("reply"), "sender": handler_result.get("sender"),
+            "image": handler_result.get("image"),
             "questions_left": self.game_session.get("questions_left", 0),
             "mode": self.game_session.get("mode")
         }
@@ -84,43 +87,57 @@ class ChatbotService:
 # services/chatbot_service.py 파일에서 _handle_briefing 함수를 아래 코드로 교체하세요.
 
     def _handle_briefing(self, user_message: str) -> dict:
-        script = self.game_session["nathan_script"]["briefing"]
+        script_briefing = self.game_session["nathan_script"]["briefing"]
+        
         if user_message.strip().lower() == "init":
-            return {"reply": script["intro"], "sender": "nathan"}
-        if any(keyword in user_message for keyword in ["알겠습니다", "알겠", "시작"]):
+            return {"reply": script_briefing["intro"], "sender": "nathan"}
+        
+        # [수정] '알겠습니다' 입력 시, 상세한 공식 보고서를 생성하는 로직입니다.
+        if any(keyword in user_message for keyword in ["알겠습니다", "알겠", "시작", "네", "계속"]):
             self.game_session["mode"] = "interrogation"
-            # 'common' 섹션에서 초기 단서를 가져오도록 수정
-            initial_clue = self.game_session["clues"]["common"]["initial"]
-            reply = f"좋습니다, 탐정님. 첫 수사 방향을 알려드리죠.\n\n[정보]: {initial_clue}"
-            reply += script["start_interrogation"]
-            return {"reply": reply, "sender": "nathan"}
-        return {"reply": script["default"], "sender": "nathan"}
-    
+            report_script = script_briefing["case_file_report"]
+            full_report = [
+                report_script["header"],
+                report_script["victim_profile"],
+                report_script["scene_overview"],
+                report_script["preliminary_findings"],
+                script_briefing["start_interrogation"]
+            ]
+            final_reply = "\n".join(full_report)
+            return {"reply": final_reply, "sender": "nathan"}
+        
+        return {"reply": script_briefing.get("default", "준비되시면 '알겠습니다'라고 말씀해주십시오."), "sender": "nathan"}
     def _handle_interrogation(self, user_message: str, suspect_id: str) -> dict:
         try:
             if self.game_session["questions_left"] <= 0:
-                return {"reply": "더 이상 질문할 수 없습니다. 이제 범인을 지목해야 합니다.", "sender": "system"}
+                return {"reply": "더 이상 질문할 수 없습니다. 이제 범인을 지목해야 합니다.", "sender": "system", "image": None}
+            
             is_killer = (self.game_session["killer"] == suspect_id)
             suspect_config = self._load_suspect_config(suspect_id)
             knowledge_base = self.game_session["active_knowledge"][suspect_id]
+            
             retrieved_doc = self._search_similar(user_message, knowledge_base)
+            
+            # [수정] 이미지 '객체'를 통째로 추출합니다.
+            image_info_to_show = retrieved_doc.get("image") if retrieved_doc else None
+            
             system_prompt = suspect_config['system_prompt_killer'] if is_killer else suspect_config['system_prompt_innocent']
             history = self._get_conversation_history(suspect_id, user_message)
             final_prompt = self._build_final_prompt(suspect_config, system_prompt, history, user_message, retrieved_doc)
-                   # === 디버깅을 위해 이 print 문을 추가하세요! ===
-            print("======== FINAL PROMPT TO LLM ========")
-            print(final_prompt)
-            print("=====================================")
+            
+            print("======== FINAL PROMPT TO LLM ========"); print(final_prompt); print("=====================================")
 
             response = self.client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "user", "content": final_prompt}], temperature=0.7, max_tokens=300)
             reply = response.choices[0].message.content.strip()
+            
             self.game_session["questions_left"] -= 1
             self._save_to_history(suspect_id, user_message, reply)
-            return {"reply": reply, "sender": suspect_id}
+            
+            # [수정] 최종 반환 객체에 이미지 '객체'를 포함합니다.
+            return {"reply": reply, "sender": suspect_id, "image": image_info_to_show}
         except Exception as e:
             import traceback; traceback.print_exc()
-            return {"reply": "죄송합니다. 생각에 잠시 오류가 생긴 것 같습니다...", "sender": suspect_id}
-
+            return {"reply": "죄송합니다. 생각에 잠시 오류가 생긴 것 같습니다...", "sender": suspect_id, "image": None}
 # services/chatbot_service.py 의 make_accusation 함수
 
     def make_accusation(self, accused_suspect_id: str) -> dict:

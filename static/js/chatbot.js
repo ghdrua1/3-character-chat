@@ -152,8 +152,10 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function handleServerResponse(data) {
-    const { reply, sender, questions_left, mode } = data;
-    appendMessage(sender || "bot", reply);
+    // 서버 응답에서 'image' 객체를 추출합니다.
+    const { reply, sender, questions_left, mode, image } = data;
+    // appendMessage에 'image' 객체를 세 번째 인자로 전달합니다.
+    appendMessage(sender || "bot", reply, image);
 
     if (mode) {
       currentGameMode = mode;
@@ -231,27 +233,42 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function appendMessage(sender, text) {
+  function appendMessage(sender, text, imageInfo = null) {
+    // (1차 업그레이드 내용은 모두 동일)
     const messageElem = document.createElement("div");
     const messageType = sender === "user" ? "user" : "bot";
     messageElem.classList.add("message", messageType);
 
-    if (messageType === "bot") {
+    if (messageType === "user") {
+      messageElem.innerHTML = text.replace(/\n/g, "<br>");
+    } else {
       const senderName = document.createElement("div");
       senderName.className = "sender-name";
       const displayName = sender.charAt(0).toUpperCase() + sender.slice(1);
       senderName.textContent = displayName;
       messageElem.appendChild(senderName);
-    }
 
-    const textContainer = document.createElement("div");
-    textContainer.innerHTML = text.replace(/\n/g, "<br>");
-    messageElem.appendChild(textContainer);
+      if (imageInfo && imageInfo.path) {
+        const img = document.createElement("img");
+        img.src = `/${imageInfo.path}`;
+        img.alt = imageInfo.alt || "관련 이미지";
+        img.style.maxWidth = "100%";
+        img.style.borderRadius = "8px";
+        img.style.marginBottom = "8px";
+        img.style.cursor = "pointer";
+        img.onclick = () => window.open(img.src, "_blank");
+        messageElem.appendChild(img);
+      }
+
+      const textContainer = document.createElement("div");
+      textContainer.innerHTML = text.replace(/\n/g, "<br>");
+      messageElem.appendChild(textContainer);
+    }
 
     chatLog.appendChild(messageElem);
     chatLog.scrollTop = chatLog.scrollHeight;
 
-    // 현재 용의자의 대화 로그 저장 (용의자가 선택된 경우에만)
+    // [2차 업그레이드 핵심] 팀원의 대화 로그 저장 기능을 여기에 추가.
     if (currentSuspectId) {
       saveChatLog(currentSuspectId, sender, text);
     }
