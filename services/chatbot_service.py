@@ -103,10 +103,17 @@ class ChatbotService:
                 report_script["preliminary_findings"],
                 script_briefing["start_interrogation"]
             ]
+            
             final_reply = "\n".join(full_report)
-            return {"reply": final_reply, "sender": "nathan"}
+
+            # [수정] briefing 섹션에서 report_image를 가져옵니다.
+            report_image_info = script_briefing.get("report_image")
+            
+            return {"reply": final_reply, "sender": "nathan", "image":report_image_info}
         
         return {"reply": script_briefing.get("default", "준비되시면 '알겠습니다'라고 말씀해주십시오."), "sender": "nathan"}
+    
+    
     def _handle_interrogation(self, user_message: str, suspect_id: str) -> dict:
         try:
             if self.game_session["questions_left"] <= 0:
@@ -316,9 +323,21 @@ class ChatbotService:
         
         # === 여기가 업그레이드된 부분입니다! (시간 키워드 인식) ===
         time_keywords_map = {
-            "11시 30분": ["11시 30분", "열한시 삼십분", "막차 시간"],
-            "11시 40분": ["11시 40분", "열한시 사십분"],
-            "11시 50분": ["11시 50분", "열한시 오십분", "사건 시각", "그 시간", "그때"]
+            "11시 30분": [
+                "11시 30분", "열한시 삼십분", "열한시 반", "11시 반",
+                "23시 30분", "밤 11시 30분", "오후 11시 30분",
+                "막차 시간"
+            ],
+            "11시 40분": [
+                "11시 40분", "열한시 사십분",
+                "23시 40분", "밤 11시 40분", "오후 11시 40분"
+            ],
+            "11시 50분": [
+                "11시 50분", "열한시 오십분",
+                "23시 50분", "밤 11시 50분", "오후 11시 50분",
+                "자정 무렵", "자정쯤", "자정 직전", "00시 전후", "거의 자정",
+                "사건 시각", "그 시간", "그때"
+            ]
         }
 
         detected_time = None

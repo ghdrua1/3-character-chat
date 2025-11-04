@@ -253,6 +253,10 @@ document.addEventListener("DOMContentLoaded", () => {
         img.src = `/${imageInfo.path}`;
         img.alt = imageInfo.alt || "관련 이미지";
         img.style.maxWidth = "100%";
+                
+        img.style.maxHeight = "400px"; // 이미지의 최대 높이를 400px로 제한합니다.
+        img.style.objectFit = "contain"; // 이미지가 비율을 유지하며 컨테이너 안에 맞춰지도록 설정합니다.
+        
         img.style.borderRadius = "8px";
         img.style.marginBottom = "8px";
         img.style.cursor = "pointer";
