@@ -270,7 +270,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // [2차 업그레이드 핵심] 팀원의 대화 로그 저장 기능을 여기에 추가.
     if (currentSuspectId) {
-      saveChatLog(currentSuspectId, sender, text);
+      saveChatLog(currentSuspectId, sender, text, imageInfo);
     }
   }
 
@@ -310,7 +310,7 @@ document.addEventListener("DOMContentLoaded", () => {
     return `chat_log_${suspectId}`;
   }
 
-  function saveChatLog(suspectId, sender, text) {
+  function saveChatLog(suspectId, sender, text, imageInfo = null) {
     try {
       const key = getStorageKey(suspectId);
       let logs = JSON.parse(localStorage.getItem(key) || "[]");
@@ -318,6 +318,7 @@ document.addEventListener("DOMContentLoaded", () => {
       logs.push({
         sender: sender,
         text: text,
+        imageInfo: imageInfo,
         timestamp: Date.now(),
       });
 
@@ -363,8 +364,8 @@ document.addEventListener("DOMContentLoaded", () => {
           // 용의자 정보 카드 복원
           displaySuspectInfoWithoutSave(log.suspectId);
         } else {
-          // 일반 메시지 복원
-          appendMessageWithoutSave(log.sender, log.text);
+          // 일반 메시지 복원 (이미지 정보 포함)
+          appendMessageWithoutSave(log.sender, log.text, log.imageInfo);
         }
       });
 
@@ -406,22 +407,37 @@ document.addEventListener("DOMContentLoaded", () => {
     chatLog.appendChild(infoCard);
   }
 
-  function appendMessageWithoutSave(sender, text) {
+  function appendMessageWithoutSave(sender, text, imageInfo = null) {
     const messageElem = document.createElement("div");
     const messageType = sender === "user" ? "user" : "bot";
     messageElem.classList.add("message", messageType);
 
-    if (messageType === "bot") {
+    if (messageType === "user") {
+      messageElem.innerHTML = text.replace(/\n/g, "<br>");
+    } else {
       const senderName = document.createElement("div");
       senderName.className = "sender-name";
       const displayName = sender.charAt(0).toUpperCase() + sender.slice(1);
       senderName.textContent = displayName;
       messageElem.appendChild(senderName);
-    }
 
-    const textContainer = document.createElement("div");
-    textContainer.innerHTML = text.replace(/\n/g, "<br>");
-    messageElem.appendChild(textContainer);
+      // 이미지가 있으면 복원
+      if (imageInfo && imageInfo.path) {
+        const img = document.createElement("img");
+        img.src = `/${imageInfo.path}`;
+        img.alt = imageInfo.alt || "관련 이미지";
+        img.style.maxWidth = "100%";
+        img.style.borderRadius = "8px";
+        img.style.marginBottom = "8px";
+        img.style.cursor = "pointer";
+        img.onclick = () => window.open(img.src, "_blank");
+        messageElem.appendChild(img);
+      }
+
+      const textContainer = document.createElement("div");
+      textContainer.innerHTML = text.replace(/\n/g, "<br>");
+      messageElem.appendChild(textContainer);
+    }
 
     chatLog.appendChild(messageElem);
   }
