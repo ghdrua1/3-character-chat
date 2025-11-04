@@ -31,7 +31,7 @@ class ChatbotService:
             return
         
         active_knowledge = self._create_active_knowledge(suspect_ids, killer)
-        # [수정] 불필요한 clues 변수를 제거하고 nathan_script 전체만 저장합니다.
+        # [수정] 불필요한 clues 변수 할당을 제거합니다.
         self.game_session = {
             "killer": killer, "nathan_script": nathan_script,
             "active_knowledge": active_knowledge, "history": {s_id: [] for s_id in suspect_ids},
@@ -39,15 +39,13 @@ class ChatbotService:
             "mid_report_done": False
         }
         print(f"--- 새로운 게임 시작 --- 범인은 '{killer}' 입니다.")
-        
-
     def generate_response(self, user_message: str, suspect_id: str = None) -> dict:
         if user_message.strip().lower() == "init":
             return self._handle_briefing(user_message)
         
         current_mode = self.game_session.get("mode")
         
-        # [수정] 범용 이미지 시스템이 적용된 중간 보고 로직
+        # [수정] 범용 이미지 시스템이 적용된 새로운 중간 보고 로직입니다.
         if current_mode == "interrogation" and self.game_session.get("questions_left") == 8 and not self.game_session.get("mid_report_done"):
             self.game_session["mid_report_done"] = True
             killer = self.game_session["killer"]
@@ -65,7 +63,6 @@ class ChatbotService:
                 "mode": current_mode
             }
         
-        # [수정] 최종 응답 객체에 image 필드를 전달하도록 명시
         handler_result = {}
         if current_mode == "error":
             handler_result = {"reply": f"게임 초기화 오류: {self.game_session.get('error_message')}", "sender": "system"}
@@ -79,6 +76,7 @@ class ChatbotService:
         else:
              handler_result = {"reply": "게임 모드 설정에 오류가 발생했습니다.", "sender": "system"}
         
+        # [수정] 최종 응답 객체에 image 필드를 항상 포함하여 전달하도록 수정합니다.
         final_response = {
             "reply": handler_result.get("reply"), "sender": handler_result.get("sender"),
             "image": handler_result.get("image"),
@@ -94,7 +92,7 @@ class ChatbotService:
         if user_message.strip().lower() == "init":
             return {"reply": script_briefing["intro"], "sender": "nathan"}
         
-        # [수정] '알겠습니다' 입력 시, 상세한 공식 보고서를 생성합니다.
+        # [수정] '알겠습니다' 입력 시, 상세한 공식 보고서를 생성하는 로직입니다.
         if any(keyword in user_message for keyword in ["알겠습니다", "알겠", "시작", "네", "계속"]):
             self.game_session["mode"] = "interrogation"
             report_script = script_briefing["case_file_report"]
@@ -109,7 +107,6 @@ class ChatbotService:
             return {"reply": final_reply, "sender": "nathan"}
         
         return {"reply": script_briefing.get("default", "준비되시면 '알겠습니다'라고 말씀해주십시오."), "sender": "nathan"}
-
     def _handle_interrogation(self, user_message: str, suspect_id: str) -> dict:
         try:
             if self.game_session["questions_left"] <= 0:
@@ -141,7 +138,6 @@ class ChatbotService:
         except Exception as e:
             import traceback; traceback.print_exc()
             return {"reply": "죄송합니다. 생각에 잠시 오류가 생긴 것 같습니다...", "sender": suspect_id, "image": None}
-
 # services/chatbot_service.py 의 make_accusation 함수
 
     def make_accusation(self, accused_suspect_id: str) -> dict:
@@ -188,7 +184,7 @@ class ChatbotService:
 탐정 'Adrian Vale'이 '{innocent_config['name']}'을 범인으로 지목했지만, 틀렸다.
 
 # 핵심 임무
-1. 먼저, 억울하게 지목된 '{innocent_config['name']}'의 페르소나를 참고하여 그의 억울함이 담긴 짧은 반박 대사를 생성하라.
+1. 먼저, 억울하게 지목된 '{innocent_config['name']}'의 페르소나를 참고하여 의 억울함이 담긴 짧은 반박 대사를 생성하라.
    - 페르소나: {innocent_persona_str}
    - 상황: {innocent_config['system_prompt_innocent']}
 
