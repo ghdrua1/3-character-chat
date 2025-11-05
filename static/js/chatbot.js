@@ -20,6 +20,8 @@ document.addEventListener("DOMContentLoaded", () => {
   let currentSuspectId = null;
   let isLoading = false;
   let currentGameMode = "briefing";
+  // 아웃트로 대기열: 지목 후 사용자가 '사건 회귀'라고 말하면 재생
+  let pendingOutro = null;
 
   // 용의자 정보 데이터
   const suspectData = {
@@ -234,7 +236,8 @@ document.addEventListener("DOMContentLoaded", () => {
       "system",
       `당신은 ${
         accusedId.charAt(0).toUpperCase() + accusedId.slice(1)
-      }을(를) 범인으로 지목했습니다...`
+      }을(를) 범인으로 지목했습니다...`,
+      { path: "static/images/adrian_vale/고민.png", alt: "탐정의 고민" }
     );
     setLoading(true);
 
@@ -246,8 +249,10 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       const data = await response.json();
 
+      // 1) 지목당한 인물의 심정 토로/자백/반박 먼저 출력
       appendMessage(data.sender, data.final_statement, data.image);
 
+      // 2) 성공/실패 문구 출력 (실패 시 탐정 실망 이미지 포함)
       if (data.result === "success") {
         appendMessage(
           "system",
@@ -256,8 +261,29 @@ document.addEventListener("DOMContentLoaded", () => {
       } else {
         appendMessage(
           "system",
-          "<b>[사건 미궁]</b> 잘못된 지목입니다. 진범은 따로 있었습니다."
+          "<b>[사건 미궁]</b> 잘못된 지목입니다. 진범은 따로 있었습니다.",
+          { path: "static/images/outro/detective_disappointed.png", alt: "탐정의 실망" }
         );
+      }
+
+      // 3) 10초 후 아웃트로 자동 재생
+      if (data.additional_messages && Array.isArray(data.additional_messages) && data.additional_messages.length > 0) {
+        setTimeout(async () => {
+          setLoading(true);
+          try {
+            for (let i = 0; i < data.additional_messages.length; i++) {
+              const msg = data.additional_messages[i];
+              await new Promise((resolve) => setTimeout(resolve, 4500));
+              const msgText = msg.reply || msg.text || "";
+              const msgImage = msg.image || null;
+              appendMessage(msg.sender || "system", msgText, msgImage);
+            }
+          } catch (err) {
+            console.error("[아웃트로] 재생 중 오류:", err);
+          } finally {
+            setLoading(false);
+          }
+        }, 10000); // 10초 대기
       }
 
       userMessageInput.placeholder =
@@ -585,8 +611,8 @@ document.addEventListener("DOMContentLoaded", () => {
     // 1. 모든 용의자의 대화 로그 초기화 (새 게임 시작)
     clearAllChatLogs();
 
-    // 2. 서버에 새로운 게임 시작을 요청
-    await fetch("/api/start_new_game", { method: "POST" });
+    // 2. 서버에 새로운 게임 시작을 요청 (대기하지 않고 비동기 전송)
+    fetch("/api/start_new_game", { method: "POST" }).catch(() => {});
 
     // 3. Nathan 탭을 기본으로 활성화
     currentSuspectId = "nathan";
@@ -595,7 +621,7 @@ document.addEventListener("DOMContentLoaded", () => {
       nathanTab.classList.add("active");
     }
 
-    // 4. 초기 메시지(init)를 보내 Nathan의 브리핑을 받음
+    // 4. 초기 메시지(init)를 보내 Nathan의 브리핑을 받음 (즉시 시작)
     sendMessage(true);
   }
 

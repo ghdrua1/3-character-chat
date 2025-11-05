@@ -3,6 +3,8 @@
 import os
 import json
 import random
+import threading
+import time
 from pathlib import Path
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -10,6 +12,9 @@ import chromadb
 from chromadb.config import Settings
 
 load_dotenv()
+# Chroma 텔레메트리 비활성화 (에러 로그 및 불필요한 지연 방지)
+os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
+os.environ.setdefault("CHROMA_TELEMETRY_ENABLED", "False")
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 class ChatbotService:
@@ -34,6 +39,9 @@ class ChatbotService:
         )
         
         self.game_session = {}
+        # 용의자별 벡터 DB 구축 여부/빌드중 캐시
+        self._vdb_built_for: set[str] = set()
+        self._vdb_building: set[str] = set()
         self.start_new_game()
         print("[ChatbotService] 초기화 완료. 새로운 게임이 준비되었습니다.")
 
@@ -46,7 +54,8 @@ class ChatbotService:
             return
         
         active_knowledge = self._create_active_knowledge(suspect_ids, killer)
-        # [수정] 불필요한 clues 변수 할당을 제거합니다.
+        # 게임 시작 시에는 벡터DB를 즉시 구축하지 않고, 최초 심문 시점에 용의자별 1회 구축합니다.
+        self._vdb_built_for.clear()
         self.game_session = {
             "killer": killer, "nathan_script": nathan_script,
             "active_knowledge": active_knowledge, "history": {s_id: [] for s_id in suspect_ids},
@@ -54,6 +63,8 @@ class ChatbotService:
             "mid_report_done": False
         }
         print(f"--- 새로운 게임 시작 --- 범인은 '{killer}' 입니다.")
+        # 브리핑에는 영향 없이, 백그라운드에서 프리워밍 시작
+        threading.Thread(target=self._warmup_in_background, daemon=True).start()
     def generate_response(self, user_message: str, suspect_id: str = None) -> dict:
         # 1. 상황에 맞는 핸들러를 호출하여 결과를 받습니다.
         if user_message.strip().lower() == "init":
@@ -120,6 +131,8 @@ class ChatbotService:
                 return {"reply": "더 이상 질문할 수 없습니다. 이제 범인을 지목해야 합니다.", "sender": "system", "image": None}
 
             # --- 용의자 답변 생성 (벡터 검색 RAG) ---
+            # 벡터DB 보장: 해당 용의자 컬렉션이 없거나 아직 구축 전이면 지금 1회 구축
+            self._ensure_vector_db_for_suspect(suspect_id)
             is_killer = (self.game_session["killer"] == suspect_id)
             suspect_config = self._load_suspect_config(suspect_id)
             knowledge_base = self.game_session["active_knowledge"][suspect_id]
@@ -240,13 +253,81 @@ class ChatbotService:
         emotion = self._analyze_emotion(final_statement, accused_suspect_id)
         emotion_image = self._get_emotion_image(accused_suspect_id, emotion)
 
-        return {
+        # 아웃트로 시퀀스 구성 (브리핑과 유사한 순차 연출용)
+        additional_messages = []
+        try:
+            real_killer_cfg = self._load_suspect_config(real_killer_id) or {}
+            killer_knowledge = self._load_suspect_knowledge(real_killer_id) or {}
+            confession_details = killer_knowledge.get("killer_confession_details", {})
+            
+            # 기본값 보장
+            killer_name = real_killer_cfg.get('name', real_killer_id)
+            
+            # 진범 별 이미지 경로 계산: 분노(말다툼), 살인의 순간, 증거 이미지
+            killer_folder_map = {
+                'leonard': 'leonard_graves',
+                'walter': 'walter_bridges',
+                'clara': 'clara_hwang'
+            }
+            killer_folder = killer_folder_map.get(real_killer_id, real_killer_id)
+            argument_img_path = f"static/images/{killer_folder}/분노.png"
+            murder_img_path = (
+                "static/images/evidence/crime_scene_walter.png"
+                if real_killer_id == 'walter'
+                else "static/images/evidence/crime_scene_blood.png"
+            )
+            # 진범별 증거 이미지 매핑
+            clue_img_map = {
+                'leonard': 'static/images/evidence/fake_ticket.png',
+                'walter': 'static/images/evidence/oily_footprint.png',
+                'clara': 'static/images/evidence/clean_scissors.png'
+            }
+            clue_img_path = clue_img_map.get(real_killer_id, 'static/images/evidence/oily_footprint.png')
+            
+            if is_correct:
+                # 성공: 진범 자백 이후 회귀 컷씬([사건 회귀] 헤더→기사→비웃음→말다툼→공포→살인→엔딩)
+                additional_messages = [
+                    {"sender": "system", "reply": "[사건 회귀] 사건의 핵심 흐름을 정리합니다.", "image": None},
+                    {"sender": "system", "reply": "기사의 취재 내용이 공개된 뒤 갈등이 본격화되었습니다. 기사는 피의자의 과거와 이해관계를 드러냈고, 양측의 감정이 고조되었습니다.", "image": {"path": "static/images/evidence/evidence_article.png", "alt": "취재 기사"}},
+                    {"sender": "system", "reply": "피해자는 비웃음으로 대응했고, 이는 대화를 협박에 가까운 공방으로 악화시켰습니다.", "image": {"path": "static/images/outro/victim_mock.png", "alt": "기자의 비웃음"}},
+                    {"sender": "system", "reply": "플랫폼 3에서 언쟁이 오갔고, 진범은 격앙된 상태였습니다.", "image": {"path": argument_img_path, "alt": "말다툼"}},
+                    {"sender": "system", "reply": "피해자는 상황을 두려워하며 뒤로 물러났고, 대응이 늦었습니다.", "image": {"path": "static/images/outro/victim_fear.png", "alt": "피해자의 공포"}},
+                    {"sender": "system", "reply": f"범행 동기: {confession_details.get('why','비공개')}\n범행 방식: {confession_details.get('how','비공개')}\n이 방식은 현장의 정황 증거와 일치합니다.", "image": {"path": murder_img_path, "alt": "사건 핵심"}},
+                    {"sender": "system", "reply": "사건은 정리되었고, 마을은 다시 일상의 고요로 돌아갔습니다.", "image": {"path": "static/images/background/할로슬롭마을.png", "alt": "마을"}},
+                    {"sender": "system", "reply": "탐정은 마지막으로 기록을 봉인하고 현장을 떠났습니다.", "image": {"path": "static/images/outro/detective_leave.png", "alt": "탐정의 퇴장"}},
+                ]
+            else:
+                # 실패: 억울함/해설 이후 진실 회귀([사건 회귀] 헤더→기사→비웃음→말다툼→공포→살인→단서 해설→탐정 실망)
+                additional_messages = [
+                    {"sender": "system", "reply": "[사건 회귀] 사건의 전말을 정리합니다.", "image": None},
+                    {"sender": "system", "reply": "보도된 기사로 인해 갈등이 증폭되었고, 피의자는 자신의 이해관계를 지키려 했습니다.", "image": {"path": "static/images/evidence/evidence_article.png", "alt": "취재 기사"}},
+                    {"sender": "system", "reply": "피해자는 비웃음으로 맞섰고, 대화는 위협적 공방으로 번졌습니다.", "image": {"path": "static/images/outro/victim_mock.png", "alt": "기자의 비웃음"}},
+                    {"sender": "system", "reply": "플랫폼에서 언쟁이 이어졌고, 진범은 격앙 상태였습니다.", "image": {"path": argument_img_path, "alt": "말다툼"}},
+                    {"sender": "system", "reply": "피해자는 상황을 두려워하며 후퇴했고 대응이 지연되었습니다.", "image": {"path": "static/images/outro/victim_fear.png", "alt": "피해자의 공포"}},
+                    {"sender": "system", "reply": f"실제 범인: {killer_name}\n동기: {confession_details.get('why','비공개')}\n수법: {confession_details.get('how','비공개')}.", "image": {"path": murder_img_path, "alt": "사건 핵심"}},
+                    {"sender": "system", "reply": f"당신이 보았던 단서는 위 수법과 직접적으로 연결됩니다. 예를 들어 현장의 흔적(발자국/도구/동선)은 '{confession_details.get('how','비공개')}'와 일치하여 진범을 특정할 수 있었습니다.", "image": {"path": clue_img_path, "alt": "단서 해설"}},
+                    {"sender": "system", "reply": "탐정은 조용히 고개를 떨궜다. 다음번엔, 더 완벽하게.", "image": {"path": "static/images/outro/detective_disappointed.png", "alt": "탐정의 실망"}},
+                ]
+        except Exception as e:
+            # 시퀀스 구성 실패 시에도 기본 응답은 유지
+            import traceback
+            print(f"[ERROR] 아웃트로 시퀀스 구성 실패: {e}")
+            traceback.print_exc()
+            # 최소한의 기본 아웃트로라도 제공
+            additional_messages = [
+                {"sender": "system", "reply": "[사건 회귀] 사건의 전말을 정리합니다.", "image": None},
+                {"sender": "system", "reply": "사건은 정리되었고, 모든 것이 끝났습니다.", "image": None}
+            ]
+
+        result = {
             "result": "success" if is_correct else "failure",
             "final_statement": final_statement,
             "sender": sender_id,
             "image": emotion_image,
-            "is_game_over": True
+            "is_game_over": True,
+            "additional_messages": additional_messages
         }
+        return result
     def get_recommended_questions(self, suspect_id: str) -> list:
         knowledge = self._load_suspect_knowledge(suspect_id)
         return knowledge.get("recommended_questions", []) if knowledge else []
@@ -349,9 +430,6 @@ class ChatbotService:
             
             active_knowledge[suspect_id] = combined_knowledge
             
-            # === 벡터 DB에 저장 ===
-            self._build_vector_db_for_suspect(suspect_id, combined_knowledge)
-            
         return active_knowledge
     
     def _create_embedding(self, text: str) -> list:
@@ -417,18 +495,62 @@ class ChatbotService:
                 ids.append(f"{suspect_id}_{idx}")
             
             if documents:
-                collection.add(
-                    documents=documents,
-                    embeddings=embeddings,
-                    metadatas=metadatas,
-                    ids=ids
-                )
+                # 중복 ID 경고 방지를 위해 upsert 사용 (존재 시 교체)
+                if hasattr(collection, "upsert"):
+                    collection.upsert(
+                        documents=documents,
+                        embeddings=embeddings,
+                        metadatas=metadatas,
+                        ids=ids
+                    )
+                else:
+                    collection.add(
+                        documents=documents,
+                        embeddings=embeddings,
+                        metadatas=metadatas,
+                        ids=ids
+                    )
                 print(f"[ChromaDB] {suspect_id} 용의자의 {len(documents)}개 문서를 벡터 DB에 저장했습니다.")
             
         except Exception as e:
             print(f"[ERROR] 벡터 DB 구축 실패 ({suspect_id}): {e}")
             import traceback
             traceback.print_exc()
+
+    def _ensure_vector_db_for_suspect(self, suspect_id: str):
+        """심문 시작 전에 해당 용의자 컬렉션이 구축되었는지 확인하고, 필요 시 1회 구축합니다."""
+        try:
+            if suspect_id in self._vdb_built_for:
+                return
+            # 다른 스레드에서 빌드 중이면 반환
+            if suspect_id in self._vdb_building:
+                return
+            knowledge_base = self.game_session.get("active_knowledge", {}).get(suspect_id, [])
+            if not knowledge_base:
+                return
+            self._vdb_building.add(suspect_id)
+            try:
+                self._build_vector_db_for_suspect(suspect_id, knowledge_base)
+            finally:
+                self._vdb_building.discard(suspect_id)
+            self._vdb_built_for.add(suspect_id)
+        except Exception:
+            import traceback; traceback.print_exc()
+
+    def _warmup_in_background(self):
+        """게임 시작 직후, 브리핑을 방해하지 않고 백그라운드에서 용의자별 벡터DB를 미리 구축합니다."""
+        try:
+            # 아주 짧게 양보하여 초기 브리핑 트리거가 먼저 나가도록 함
+            time.sleep(0.3)
+            suspects = list(self.game_session.get("active_knowledge", {}).keys())
+            for suspect_id in suspects:
+                if suspect_id in self._vdb_built_for:
+                    continue
+                self._ensure_vector_db_for_suspect(suspect_id)
+                # API 버스트 방지
+                time.sleep(0.1)
+        except Exception:
+            import traceback; traceback.print_exc()
     
 # services/chatbot_service.py 의 _search_similar 함수 (하이브리드 검색 방식)
 
