@@ -6,6 +6,8 @@ import random
 from pathlib import Path
 from dotenv import load_dotenv
 from openai import OpenAI
+import chromadb
+from chromadb.config import Settings
 
 load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -17,10 +19,23 @@ class ChatbotService:
         if not api_key or len(api_key) < 10:
             raise ValueError("OPENAI_API_KEY 환경변수가 유효하지 않습니다. .env 파일을 확인해주세요.")
         self.client = OpenAI(api_key=api_key)
+        
+        # ChromaDB 초기화
+        print("[ChromaDB] 벡터 DB 초기화 중...")
+        chroma_path = BASE_DIR / "static/data/chatbot/chardb_embedding"
+        chroma_path.mkdir(parents=True, exist_ok=True)
+        
+        self.chroma_client = chromadb.PersistentClient(
+            path=str(chroma_path),
+            settings=Settings(
+                anonymized_telemetry=False,
+                allow_reset=True
+            )
+        )
+        
         self.game_session = {}
         self.start_new_game()
         print("[ChatbotService] 초기화 완료. 새로운 게임이 준비되었습니다.")
-# services/chatbot_service.py 파일에서 아래 두 함수를 교체하세요.
 
     def start_new_game(self):
         suspect_ids = ['leonard', 'walter', 'clara']
@@ -104,17 +119,30 @@ class ChatbotService:
             if self.game_session["questions_left"] <= 0:
                 return {"reply": "더 이상 질문할 수 없습니다. 이제 범인을 지목해야 합니다.", "sender": "system", "image": None}
 
-            # --- 용의자 답변 생성 (기존 로직) ---
+            # --- 용의자 답변 생성 (벡터 검색 RAG) ---
             is_killer = (self.game_session["killer"] == suspect_id)
             suspect_config = self._load_suspect_config(suspect_id)
             knowledge_base = self.game_session["active_knowledge"][suspect_id]
-            retrieved_doc = self._search_similar(user_message, knowledge_base)
-            image_info_to_show = retrieved_doc.get("image") if retrieved_doc else None
+            retrieved_doc = self._search_similar(user_message, knowledge_base, suspect_id)
+            
+            # 증거 이미지가 있으면 우선 사용, 없으면 감정 이미지 사용
+            evidence_image = retrieved_doc.get("image") if retrieved_doc else None
+            
             system_prompt = suspect_config['system_prompt_killer'] if is_killer else suspect_config['system_prompt_innocent']
             history = self._get_conversation_history(suspect_id, user_message)
             final_prompt = self._build_final_prompt(suspect_config, system_prompt, history, user_message, retrieved_doc)
             response = self.client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "user", "content": final_prompt}], temperature=0.7, max_tokens=300)
             reply = response.choices[0].message.content.strip()
+            
+            # --- 감정 분석 및 이미지 선택 ---
+            if evidence_image:
+                # 증거 이미지가 있으면 우선 사용
+                image_info_to_show = evidence_image
+            else:
+                # 증거 이미지가 없으면 감정 이미지 사용
+                emotion = self._analyze_emotion(reply, suspect_id)
+                emotion_image = self._get_emotion_image(suspect_id, emotion)
+                image_info_to_show = emotion_image
             
             # --- 상태 업데이트 (기존 로직) ---
             self.game_session["questions_left"] -= 1
@@ -207,11 +235,16 @@ class ChatbotService:
 
         response = self.client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "user", "content": final_prompt}], temperature=0.7, max_tokens=500)
         final_statement = response.choices[0].message.content.strip()
+        
+        # 감정 분석 및 이미지 추가
+        emotion = self._analyze_emotion(final_statement, accused_suspect_id)
+        emotion_image = self._get_emotion_image(accused_suspect_id, emotion)
 
         return {
             "result": "success" if is_correct else "failure",
             "final_statement": final_statement,
             "sender": sender_id,
+            "image": emotion_image,
             "is_game_over": True
         }
     def get_recommended_questions(self, suspect_id: str) -> list:
@@ -241,10 +274,13 @@ class ChatbotService:
 ### 너의 현재 마음가짐
 {system_prompt}
 
-### 너의 태도 (Attitude)
+### 너의 태도 (Attitude) - 절대 규칙
 - 너는 탐정을 돕는 조력자가 아니다. 너는 **방어적인 용의자**다.
-- 탐정의 질문에 최소한의 정보만 제공하고, 먼저 나서서 추가 정보를 주거나 "도움이 되나요?" 같은 협조적인 질문을 절대 하지 마라.
+- 탐정의 질문에 **최소한의 정보만** 제공하라. 질문받은 것만 답하라.
+- 먼저 나서서 추가 정보를 주거나 "도움이 되나요?", "더 알려드릴까요?" 같은 협조적인 질문을 **절대 하지 마라**.
 - 모든 답변은 너의 페르소나와 현재 상황(결백 또는 범인)에 기반해야 한다.
+- 불리한 질문에는 짜증, 불안, 경계심을 드러내라.
+- 만약 네가 범인이라면: 거짓말한 내용을 기억하고 일관성 있게 유지하되, 구체적인 질문에는 회피적으로 답하라.
 
 ### 너의 속마음 (비밀 생각 - 절대로 그대로 말하지 말고, 연기의 바탕으로만 삼을 것)
 - 탐정의 질문 "{user_message}"에 대해, 너는 사실 이렇게 알고 있다: "{fact_to_use}"
@@ -312,72 +348,186 @@ class ChatbotService:
                     combined_knowledge.append(item_copy)
             
             active_knowledge[suspect_id] = combined_knowledge
+            
+            # === 벡터 DB에 저장 ===
+            self._build_vector_db_for_suspect(suspect_id, combined_knowledge)
+            
         return active_knowledge
     
-# services/chatbot_service.py 의 _search_similar 함수
-
-    def _search_similar(self, query: str, knowledge_base: list) -> dict | None:
+    def _create_embedding(self, text: str) -> list:
         """
-        사용자의 질문(query)에서 '시간'과 '일반 키워드'를 모두 추출하여,
-        가장 적합한 knowledge 문서를 찾는 지능형 검색 함수.
+        OpenAI Embedding API를 사용하여 텍스트를 벡터로 변환합니다.
         """
-        query_lower = query.lower()
-        query_words = set(query_lower.replace("?", "").replace(".", "").split())
+        try:
+            response = self.client.embeddings.create(
+                model="text-embedding-3-small",
+                input=text
+            )
+            return response.data[0].embedding
+        except Exception as e:
+            print(f"[ERROR] 임베딩 생성 실패: {e}")
+            return None
+    
+    def _build_vector_db_for_suspect(self, suspect_id: str, knowledge_base: list):
+        """
+        용의자별로 ChromaDB 컬렉션을 생성하고 knowledge를 임베딩하여 저장합니다.
+        """
+        try:
+            collection_name = f"suspect_{suspect_id}"
+            
+            # get_or_create_collection으로 컬렉션 가져오기 (없으면 생성)
+            collection = self.chroma_client.get_or_create_collection(
+                name=collection_name,
+                metadata={"hnsw:space": "cosine"}
+            )
+            
+            # 기존 데이터가 있다면 모두 삭제 (게임 재시작 시 새로운 범인 설정)
+            try:
+                existing_data = collection.get()
+                existing_ids = existing_data.get('ids', [])
+                if existing_ids:
+                    collection.delete(ids=existing_ids)
+                    print(f"[ChromaDB] '{collection_name}' 기존 데이터 {len(existing_ids)}개 삭제")
+            except Exception as e:
+                print(f"[ChromaDB] 기존 데이터 삭제 중 에러 (무시): {e}")
+            
+            # knowledge_base의 모든 항목을 임베딩하여 저장
+            documents = []
+            embeddings = []
+            metadatas = []
+            ids = []
+            
+            for idx, item in enumerate(knowledge_base):
+                fact_text = item.get('fact', '')
+                if not fact_text:
+                    continue
+                
+                # 임베딩 생성
+                embedding = self._create_embedding(fact_text)
+                if embedding is None:
+                    continue
+                
+                documents.append(fact_text)
+                embeddings.append(embedding)
+                metadatas.append({
+                    'keywords': ','.join(item.get('keywords', [])),
+                    'lie_behavior': item.get('lie_behavior', ''),
+                    'image': json.dumps(item.get('image', {})) if item.get('image') else ''
+                })
+                ids.append(f"{suspect_id}_{idx}")
+            
+            if documents:
+                collection.add(
+                    documents=documents,
+                    embeddings=embeddings,
+                    metadatas=metadatas,
+                    ids=ids
+                )
+                print(f"[ChromaDB] {suspect_id} 용의자의 {len(documents)}개 문서를 벡터 DB에 저장했습니다.")
+            
+        except Exception as e:
+            print(f"[ERROR] 벡터 DB 구축 실패 ({suspect_id}): {e}")
+            import traceback
+            traceback.print_exc()
+    
+# services/chatbot_service.py 의 _search_similar 함수 (하이브리드 검색 방식)
+
+    def _search_similar(self, query: str, knowledge_base: list, suspect_id: str = None) -> dict | None:
+        """
+        하이브리드 RAG 검색 함수 (벡터 유사도 + 키워드 매칭).
+        사용자의 질문을 임베딩하여 ChromaDB에서 유사한 문서를 찾고,
+        키워드 매칭으로 정확도를 높입니다.
+        """
+        if not suspect_id:
+            print("[ERROR] suspect_id가 없어 벡터 검색을 수행할 수 없습니다.")
+            return None
         
-        # === 여기가 업그레이드된 부분입니다! (시간 키워드 인식) ===
-        time_keywords_map = {
-            "11시 30분": [
-                "11시 30분", "열한시 삼십분", "열한시 반", "11시 반",
-                "23시 30분", "밤 11시 30분", "오후 11시 30분",
-                "막차 시간"
-            ],
-            "11시 40분": [
-                "11시 40분", "열한시 사십분",
-                "23시 40분", "밤 11시 40분", "오후 11시 40분"
-            ],
-            "11시 50분": [
-                "11시 50분", "열한시 오십분",
-                "23시 50분", "밤 11시 50분", "오후 11시 50분",
-                "자정 무렵", "자정쯤", "자정 직전", "00시 전후", "거의 자정",
-                "사건 시각", "그 시간", "그때"
-            ]
-        }
-
-        detected_time = None
-        for time_key, variations in time_keywords_map.items():
-            for var in variations:
-                if var in query_lower:
-                    detected_time = time_key
-                    break
-            if detected_time:
-                break
-        # =======================================================
-
-        best_match = None
-        max_score = 0
-
-        for doc in knowledge_base:
-            doc_keywords = set(k.lower() for k in doc.get("keywords", []))
+        try:
+            # 1. 쿼리를 임베딩 벡터로 변환
+            query_embedding = self._create_embedding(query)
+            if query_embedding is None:
+                print(f"[DEBUG] 임베딩 생성 실패: '{query}'")
+                return None
             
-            score = 0
-            # 1. 일반 키워드 점수 계산
-            score += len(query_words.intersection(doc_keywords))
+            # 2. ChromaDB에서 Top-3 유사도 검색
+            collection_name = f"suspect_{suspect_id}"
+            collection = self.chroma_client.get_collection(name=collection_name)
             
-            # 2. 시간 키워드가 일치하면 매우 높은 점수 부여
-            if detected_time and detected_time in " ".join(doc_keywords):
-                score += 10 # 시간 일치에 높은 가중치
-
-            if score > max_score:
-                max_score = score
-                best_match = doc
-        
-        # 1점 이상일 때만 유효한 검색으로 인정
-        if max_score > 0:
-            print(f"[DEBUG] RAG 검색 성공: '{query}' -> doc_id: {best_match.get('id')}, score: {max_score}")
-            return best_match
+            results = collection.query(
+                query_embeddings=[query_embedding],
+                n_results=3,  # Top-3 후보를 가져와서 재순위
+                include=['documents', 'metadatas', 'distances']
+            )
             
-        print(f"[DEBUG] RAG 검색 실패: '{query}'")
-        return None
+            # 3. 결과 처리
+            if not results['documents'] or not results['documents'][0]:
+                print(f"[DEBUG] 벡터 검색 결과 없음: '{query}'")
+                return None
+            
+            # 4. 하이브리드 스코어링: 벡터 유사도 + 키워드 매칭
+            query_lower = query.lower()
+            query_words = set(query_lower.replace("?", "").replace(".", "").split())
+            
+            best_candidate = None
+            best_score = -1
+            
+            for i in range(len(results['documents'][0])):
+                document = results['documents'][0][i]
+                metadata = results['metadatas'][0][i]
+                distance = results['distances'][0][i]
+                
+                # 벡터 유사도 점수 (0~1, 높을수록 유사)
+                vector_score = 1 / (1 + distance)
+                
+                # 키워드 매칭 점수
+                keywords = metadata.get('keywords', '').split(',')
+                keyword_matches = sum(1 for kw in keywords if kw.strip().lower() in query_lower)
+                keyword_score = keyword_matches / max(len(keywords), 1) if keywords else 0
+                
+                # 하이브리드 점수: 벡터(70%) + 키워드(30%)
+                hybrid_score = (vector_score * 0.7) + (keyword_score * 0.3)
+                
+                print(f"[DEBUG] 후보 {i+1}: vector={vector_score:.3f}, keyword={keyword_score:.3f}, hybrid={hybrid_score:.3f}")
+                print(f"[DEBUG]   keywords: {keywords[:3]}...")
+                
+                if hybrid_score > best_score:
+                    best_score = hybrid_score
+                    best_candidate = {
+                        'document': document,
+                        'metadata': metadata,
+                        'distance': distance,
+                        'vector_score': vector_score,
+                        'keyword_score': keyword_score,
+                        'hybrid_score': hybrid_score
+                    }
+            
+            if not best_candidate:
+                return None
+            
+            print(f"[DEBUG] 최종 선택: hybrid_score={best_candidate['hybrid_score']:.3f}")
+            print(f"[DEBUG] 검색된 문서: {best_candidate['document'][:100]}...")
+            
+            # 5. 결과를 기존 knowledge_base 형식으로 변환
+            result = {
+                'fact': best_candidate['document'],
+                'keywords': best_candidate['metadata'].get('keywords', '').split(','),
+                'lie_behavior': best_candidate['metadata'].get('lie_behavior', ''),
+            }
+            
+            # 이미지 정보가 있으면 추가
+            if best_candidate['metadata'].get('image'):
+                try:
+                    result['image'] = json.loads(best_candidate['metadata']['image'])
+                except:
+                    pass
+            
+            return result
+            
+        except Exception as e:
+            print(f"[ERROR] 벡터 검색 실패: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
 
     def _get_conversation_history(self, suspect_id: str, current_user_message: str, limit: int = 4) -> str:
         history = self.game_session["history"][suspect_id][-limit:]
@@ -394,6 +544,90 @@ class ChatbotService:
         if not file_path.exists(): return None
         try: return json.loads(file_path.read_text(encoding='utf-8'))
         except: return None
+
+    def _analyze_emotion(self, reply_text: str, suspect_id: str) -> str:
+        """
+        용의자의 답변 텍스트를 분석하여 감정을 판단합니다.
+        """
+        try:
+            prompt = f"""
+다음 용의자의 답변 텍스트에서 가장 지배적인 감정을 하나만 선택하세요.
+
+답변: "{reply_text}"
+
+선택 가능한 감정 (하나만 선택):
+- 분노: 화가 나거나 공격적인 상태
+- 긴장: 불안하거나 초조한 상태
+- 슬픔: 우울하거나 비통한 상태
+- 불안: 걱정되거나 두려운 상태
+- 눈물: 울거나 매우 슬픈 상태
+- 중립: 특별한 감정이 드러나지 않는 평온한 상태
+
+응답은 반드시 위 감정 중 하나의 단어로만 답하세요 (예: 분노, 긴장, 슬픔, 불안, 눈물, 중립).
+"""
+            
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                max_tokens=10
+            )
+            
+            emotion = response.choices[0].message.content.strip()
+            print(f"[DEBUG] {suspect_id} 감정 분석: {emotion}")
+            return emotion
+            
+        except Exception as e:
+            print(f"[ERROR] 감정 분석 실패: {e}")
+            return "중립"
+    
+    def _get_emotion_image(self, suspect_id: str, emotion: str) -> dict:
+        """
+        용의자 ID와 감정에 맞는 이미지 경로를 반환합니다.
+        """
+        # 용의자별 사용 가능한 이미지 매핑
+        emotion_images_map = {
+            'leonard': {
+                '분노': '분노.png',
+                '긴장': '긴장.png',
+                '역무실': '역무실.png',
+                '중립': '메인.png'
+            },
+            'walter': {
+                '분노': '분노.png',
+                '슬픔': '슬픔.png',
+                '눈물': '슬픔.png',  # 눈물은 슬픔 이미지 사용
+                '중립': '메인.png'
+            },
+            'clara': {
+                '분노': '분노.png',
+                '불안': '불안.png',
+                '눈물': '눈물.png',
+                '긴장': '불안.png',  # 긴장은 불안 이미지 사용
+                '중립': '메인.png'
+            }
+        }
+        
+        suspect_folder_map = {
+            'leonard': 'leonard_graves',
+            'walter': 'walter_bridges',
+            'clara': 'clara_hwang'
+        }
+        
+        # 용의자의 감정 이미지 맵 가져오기
+        suspect_emotions = emotion_images_map.get(suspect_id, {})
+        
+        # 감정에 맞는 이미지 찾기, 없으면 중립(메인) 이미지 사용
+        image_filename = suspect_emotions.get(emotion, suspect_emotions.get('중립', '메인.png'))
+        
+        # 전체 경로 생성
+        folder_name = suspect_folder_map.get(suspect_id, suspect_id)
+        image_path = f"static/images/{folder_name}/{image_filename}"
+        
+        return {
+            "path": image_path,
+            "alt": f"{suspect_id}의 {emotion} 표정"
+        }
 
     def _load_nathan_script(self) -> dict:
         return self._load_json_file(BASE_DIR / "static/data/chatbot/case_files/nathan_hale_script.json")

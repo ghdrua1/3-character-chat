@@ -174,6 +174,37 @@
         min-height: 1.8em; /* Reserve space to prevent layout shift */
       }
 
+      /* Detective content scroll container */
+      #detective-content,
+      #case-content {
+        max-height: 250px;
+        overflow-y: auto;
+        padding-right: 1rem;
+      }
+
+      /* Custom scrollbar for content areas */
+      #detective-content::-webkit-scrollbar,
+      #case-content::-webkit-scrollbar {
+        width: 8px;
+      }
+
+      #detective-content::-webkit-scrollbar-track,
+      #case-content::-webkit-scrollbar-track {
+        background: rgba(28, 28, 26, 0.5);
+        border-radius: 4px;
+      }
+
+      #detective-content::-webkit-scrollbar-thumb,
+      #case-content::-webkit-scrollbar-thumb {
+        background: rgba(139, 30, 45, 0.6);
+        border-radius: 4px;
+      }
+
+      #detective-content::-webkit-scrollbar-thumb:hover,
+      #case-content::-webkit-scrollbar-thumb:hover {
+        background: rgba(139, 30, 45, 0.8);
+      }
+
       /* Hidden text for maintaining layout during typing */
       .hidden-char {
         visibility: hidden;
@@ -232,11 +263,6 @@
 
       /* Detective Image Container */
       .detective-container {
-        position: fixed;
-        top: 40%;
-        left: 2rem;
-        transform: translateY(-50%);
-        z-index: 50;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -251,42 +277,32 @@
         height: 300px;
         border-radius: 0;
         object-fit: cover;
+        margin-bottom: 1rem;
       }
 
-      /* Main content adjustment for fixed detective image */
+      /* Main content - now with vertical layout */
       .main-content {
         margin-left: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
       }
 
-      @media (min-width: 1025px) {
-        .main-content {
-          margin-left: 240px;
-        }
-      }
-
-      /* Intro section - always centered regardless of main-content margin */
+      /* Intro section - perfectly centered on screen */
       #intro {
-        position: absolute;
+        position: fixed;
         left: 50%;
-        transform: translateX(-50%);
+        top: 50%;
+        transform: translate(-50%, -50%);
         width: 100%;
         max-width: 100%;
         z-index: 30;
       }
 
       @media (max-width: 1024px) {
-        .detective-container {
-          position: relative;
-          top: auto;
-          left: auto;
-          transform: none;
-          margin: 2rem 0;
-        }
-
-        #intro {
-          position: relative;
-          left: auto;
-          transform: none;
+        .detective-image {
+          width: 250px;
+          height: 250px;
         }
       }
 
@@ -325,8 +341,17 @@
         }
 
         .detective-image {
-          width: 150px;
-          height: 150px;
+          width: 200px;
+          height: 200px;
+        }
+
+        #intro .code {
+          font-size: 2rem !important;
+        }
+
+        #detective-content,
+        #case-content {
+          max-height: 300px;
         }
       }
     </style>
@@ -339,50 +364,49 @@
     <!-- Fade light effect -->
     <div class="fade-light fixed inset-0 pointer-events-none z-10"></div>
 
-    <!-- Detective Image Container - Fixed position -->
-    <div
-      id="detective-image-container"
-      class="detective-container section-hidden"
-    >
-      <img
-        src="/static/images/example.png"
-        alt="Adrian Vale"
-        class="detective-image"
-        onerror="this.style.display='none'"
-      />
-    </div>
+    <!-- Intro section: CASE FILE - Always centered -->
+    <section id="intro" class="text-center mb-8">
+      <p id="case-file-text" class="code text-sm sm:text-base md:text-[40px]">
+        <span class="typewriter-cursor"></span>
+      </p>
+    </section>
 
-    <!-- Main content -->
-    <div
-      class="relative flex flex-col items-center justify-center min-h-screen p-4 sm:p-6 md:p-8 z-20 main-content"
-    >
-      <!-- Intro section: CASE FILE -->
-      <section id="intro" class="text-center mb-8">
-        <p id="case-file-text" class="code text-sm sm:text-base md:text-[40px]">
-          <span class="typewriter-cursor"></span>
-        </p>
-      </section>
+    <!-- Main content - Vertical layout -->
+    <div class="relative min-h-screen p-4 sm:p-6 md:p-8 z-20 main-content">
+      <!-- Detective Image Container -->
+      <div
+        id="detective-image-container"
+        class="detective-container section-hidden"
+      >
+        <img
+          src="/static/images/adrian_vale/메인.png"
+          alt="Adrian Vale"
+          class="detective-image"
+          onerror="this.style.display='none'"
+        />
+      </div>
 
       <!-- Section 1: Detective Context -->
       <section
         id="detective-section"
         class="paper-texture rounded-sm px-6 py-8 sm:px-8 sm:py-10 md:px-12 md:py-12 max-w-3xl w-full mb-8 section-hidden"
       >
+        <!-- Scrollable content area -->
         <div
           id="detective-content"
-          class="typewriter-text text-[#d9d9d3] text-sm sm:text-base md:text-lg leading-relaxed space-y-6"
+          class="typewriter-text text-[#d9d9d3] text-sm sm:text-base md:text-lg leading-relaxed space-y-6 mb-6"
         >
           <!-- Content will be typed here -->
         </div>
 
-        <!-- Next button -->
-        <div class="text-center mt-8">
+        <!-- Next button - Fixed below scroll area -->
+        <div class="text-center border-t border-[#2c2c29] pt-6">
           <button
             id="next-btn"
             class="indie-btn section-hidden"
             onclick="showCaseSection()"
           >
-            &lt; 다음으로
+            다음으로 &gt;
           </button>
         </div>
       </section>
@@ -392,12 +416,13 @@
         id="case-section"
         class="paper-texture rounded-sm px-6 py-8 sm:px-8 sm:py-10 md:px-12 md:py-12 max-w-3xl w-full mb-8 section-hidden"
       >
-        <div id="case-content" class="space-y-6">
+        <!-- Scrollable content area -->
+        <div id="case-content" class="space-y-6 mb-6">
           <!-- Content will be typed here -->
         </div>
 
-        <!-- Start button -->
-        <div class="text-center mt-8">
+        <!-- Start button - Fixed below scroll area -->
+        <div class="text-center border-t border-[#2c2c29] pt-6">
           <button
             id="start-btn"
             class="stamp-btn section-hidden"
@@ -453,6 +478,21 @@
         // Force layout recalculation once
         element.offsetHeight;
 
+        // Find the scrollable parent container
+        function getScrollableParent(elem) {
+          let parent = elem.parentElement;
+          while (parent) {
+            const overflowY = window.getComputedStyle(parent).overflowY;
+            if (overflowY === "auto" || overflowY === "scroll") {
+              return parent;
+            }
+            parent = parent.parentElement;
+          }
+          return null;
+        }
+
+        const scrollContainer = getScrollableParent(element);
+
         // Now reveal characters one by one and move cursor
         let charIndex = 0;
         function typeChar() {
@@ -473,6 +513,12 @@
                   cursor.parentNode.appendChild(cursor);
                 }
               }
+
+              // Auto-scroll to bottom on newline
+              if (scrollContainer) {
+                scrollContainer.scrollTop = scrollContainer.scrollHeight;
+              }
+
               setTimeout(typeChar, speed);
             } else {
               // First reveal the current character
@@ -497,12 +543,21 @@
                 }
               }
 
+              // Auto-scroll to bottom
+              if (scrollContainer) {
+                scrollContainer.scrollTop = scrollContainer.scrollHeight;
+              }
+
               setTimeout(typeChar, speed);
             }
           } else {
             // Remove cursor after typing completes
             if (cursor.parentNode) {
               cursor.parentNode.removeChild(cursor);
+            }
+            // Final scroll to bottom
+            if (scrollContainer) {
+              scrollContainer.scrollTop = scrollContainer.scrollHeight;
             }
             if (callback) callback();
           }
@@ -516,9 +571,16 @@
       function showCaseSection() {
         const detectiveSection = document.getElementById("detective-section");
         const caseSection = document.getElementById("case-section");
+        const detectiveImage = document.querySelector(".detective-image");
 
         detectiveSection.classList.add("section-hidden");
         caseSection.classList.remove("section-hidden");
+
+        // Change image to Hollowslop Station
+        if (detectiveImage) {
+          detectiveImage.src = "/static/images/background/할로슬롭스테이션.png";
+          detectiveImage.alt = "Hollowslop Station";
+        }
 
         const caseContent = document.getElementById("case-content");
         const caseTexts = [
@@ -526,6 +588,7 @@
           "한때는 지역 교통의 중심이었지만, 신도심 개발과 함께 이용객이 급감해 한 달 뒤 공식 폐역 예정이다.\n",
           "지금은 하루 두 대의 완행열차만 정차하며, 역무원도 단 한 명만 남아 근무 중이다. 대부분의 시민들은 이미 새 역을 이용하고, 이곳을 찾는 건 습관처럼 남은 몇몇 사람들뿐.",
           '<p class="text-[#ef4444] mt-4">그러던 지난 자정, 경찰에 의해 할로슬랍 스테이션 플랫폼 3에서 23:50에 사망한 걸로 보이는 피해자의 사체를 발견했다.</p>',
+          "피해자는 Elias Cole. 탐사 전문 기자로, 최근 이 지역을 취재하며 기사를 작성한 기자였다.",
         ];
 
         let currentIndex = 0;
@@ -547,6 +610,8 @@
               setTimeout(() => {
                 contentContainer.removeChild(textElement);
                 contentContainer.innerHTML += text;
+                // Scroll to bottom after HTML insertion
+                caseContent.scrollTop = caseContent.scrollHeight;
                 currentIndex++;
                 setTimeout(typeNextText, 500);
               }, 100);
@@ -590,6 +655,17 @@
               introSection.classList.add("section-hidden");
               detectiveSection.classList.remove("section-hidden");
               detectiveImageContainer.classList.remove("section-hidden");
+
+              // Play detective theme music
+              const detectiveMusic = document.getElementById("detectiveMusic");
+              if (detectiveMusic) {
+                detectiveMusic.volume = 0.6;
+                detectiveMusic
+                  .play()
+                  .catch((error) =>
+                    console.log("Detective music playback failed:", error)
+                  );
+              }
 
               // Start typing detective context
               const detectiveContent =
@@ -637,5 +713,11 @@
         );
       });
     </script>
+
+    <!-- Detective Theme Music -->
+    <audio id="detectiveMusic">
+      <source src="/static/mp3/conan.mp3" type="audio/mpeg" />
+      Your browser does not support the audio element.
+    </audio>
   </body>
 </html>

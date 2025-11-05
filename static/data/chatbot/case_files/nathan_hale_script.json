@@ -10,7 +10,7 @@
         }
       }
     ],
-    
+
     "report_scenes": [
       {
         "sender": "nathan",
@@ -37,11 +37,11 @@
             "alt": "플랫폼 3에 남아있는 사건의 흔적"
           }
         }
-      }  
+      }
     ]
   },
 
-"mid_game_report": [
+  "mid_game_report": [
     {
       "sender": "nathan",
       "reply": "탐정님, 취조중에 죄송합니다. 보고할 내용이 있습니다. 훼손되었던 피해자의 기사 파일 복원이 완료되었습니다. 한 번 보시죠.",
@@ -62,16 +62,25 @@
       "sender": "nathan",
       "conditional_content": {
         "leonard": {
-          "text": "피해자의 주머니에서 위조된 '11:50분 막차' 티켓이 발견되었습니다. 역무 시스템에 접근할 수 있는 자의 소행으로 보입니다.",
-          "image": { "path": "static/images/evidence/fake_ticket.png", "alt": "증거물: 위조된 막차표" }
+          "text": "피해자의 주머니에서 '11:50분 막차' 티켓이 발견되었습니다. 하지만 기록을 확인한 결과, 그날 11:50분 열차는 운행되지 않았습니다. 이 티켓의 출처를 밝혀야 할 것 같습니다.",
+          "image": {
+            "path": "static/images/evidence/fake_ticket.png",
+            "alt": "증거물: 위조된 막차표"
+          }
         },
         "walter": {
-          "text": "피해자가 추락한 전력 장치 구역 근처에서 기름 묻은 작업화 발자국이 발견되었습니다. 이 구역에 익숙한 자의 흔적입니다.",
-          "image": { "path": "static/images/evidence/oily_footprint.png", "alt": "증거물: 기름 묻은 발자국" }
+          "text": "피해자가 발견된 전력 장치 구역 근처에서 작업화 발자국이 발견되었습니다. 발자국에는 기계 오일이 묻어 있었습니다. 이 지역은 일반인 출입이 제한된 구역입니다.",
+          "image": {
+            "path": "static/images/evidence/oily_footprint.png",
+            "alt": "증거물: 기름 묻은 발자국"
+          }
         },
         "clara": {
-          "text": "범행에 사용된 것으로 보이는 가위가 발견되었습니다. 하지만 지문이 깨끗하게 닦여 있었습니다. 매우 신중한 범인의 소행입니다.",
-          "image": { "path": "static/images/evidence/clean_scissors.png", "alt": "증거물: 지문이 닦인 가위" }
+          "text": "피해자의 상처와 일치하는 가위가 발견되었습니다. 가위에서 지문은 검출되지 않았습니다. ",
+          "image": {
+            "path": "static/images/evidence/clean_scissors.png",
+            "alt": "증거물: 지문이 닦인 가위"
+          }
         }
       }
     }

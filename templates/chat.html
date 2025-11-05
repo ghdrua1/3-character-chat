@@ -44,6 +44,24 @@
         font-size: 0.9em;
         color: #ccc;
       }
+      .audio-toggle-btn {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        border: 2px solid #3a3a3a;
+        background: #1a1a1a;
+        color: #8b1e2d;
+        font-size: 1.2em;
+        cursor: pointer;
+        transition: all 0.3s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .audio-toggle-btn:hover {
+        border-color: #8b1e2d;
+        background: #2a2a2a;
+      }
       .chat-container {
         display: flex;
         flex: 1;
@@ -78,6 +96,17 @@
         background-color: #848a6b;
         color: #fff;
         border-color: #fff;
+      }
+      .suspect-tab.nathan-tab {
+        background-color: #4a4a4a;
+        border: 2px solid #6b7a8a;
+      }
+      .suspect-tab.nathan-tab:hover {
+        background-color: #5a5a5a;
+      }
+      .suspect-tab.nathan-tab.active {
+        background-color: #6b7a8a;
+        border: 2px solid #8a9aaa;
       }
       .recommendations {
         margin-top: 10px;
@@ -132,6 +161,7 @@
         line-height: 1.5;
         word-break: break-word;
       }
+
       .message.user {
         background-color: #4a6b8a;
         align-self: flex-end;
@@ -142,6 +172,10 @@
         background-color: #3a3a3b;
         align-self: flex-start;
         color: #fff;
+      }
+
+      .message.bot img {
+        height: 300px;
       }
       .sender-name {
         font-weight: normal;
@@ -282,8 +316,6 @@
       .suspect-info-image {
         width: 120px;
         height: 120px;
-        border: 3px solid #000;
-        box-shadow: 0 3px 0 #000;
         flex-shrink: 0;
         object-fit: cover;
         image-rendering: pixelated;
@@ -340,13 +372,26 @@
   <body>
     <header class="header">
       <div class="header-title">{{ bot_name }}</div>
-      <div class="game-info">
-        남은 질문: <span id="questions-left-display">15</span>회
+      <div style="display: flex; align-items: center; gap: 15px">
+        <div class="game-info">
+          남은 질문: <span id="questions-left-display">15</span>회
+        </div>
+        <button
+          id="audioToggle"
+          class="audio-toggle-btn"
+          onclick="toggleBackgroundMusic()"
+          title="Toggle Background Music"
+        >
+          ♪
+        </button>
       </div>
     </header>
     <div class="chat-container" data-username="{{ username }}">
       <aside class="sidebar">
         <div class="suspect-tabs">
+          <div class="suspect-tab nathan-tab" data-suspect-id="nathan">
+            수사 기록
+          </div>
           <div class="suspect-tab" data-suspect-id="leonard">
             Leonard Graves
           </div>
@@ -397,5 +442,40 @@
     </div>
 
     <script src="{{ url_for('static', filename='js/chatbot.js') }}"></script>
+
+    <!-- Background Music -->
+    <audio id="bgMusic" loop>
+      <source src="/static/mp3/background.mp3" type="audio/mpeg" />
+      Your browser does not support the audio element.
+    </audio>
+
+    <script>
+      const bgMusic = document.getElementById("bgMusic");
+      const audioToggle = document.getElementById("audioToggle");
+      let isPlaying = false;
+
+      // 배경음악 재생/정지 토글
+      function toggleBackgroundMusic() {
+        if (isPlaying) {
+          bgMusic.pause();
+          audioToggle.textContent = "♪";
+          audioToggle.style.opacity = "0.6";
+          isPlaying = false;
+        } else {
+          bgMusic
+            .play()
+            .catch((error) => console.log("Audio playback failed:", error));
+          audioToggle.textContent = "⏸";
+          audioToggle.style.opacity = "1";
+          isPlaying = true;
+        }
+      }
+
+      // 음량 조절 (50%로 설정)
+      bgMusic.volume = 0.5;
+
+      // 초기 상태 설정
+      audioToggle.style.opacity = "0.6";
+    </script>
   </body>
 </html>

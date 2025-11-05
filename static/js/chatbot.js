@@ -29,7 +29,7 @@ document.addEventListener("DOMContentLoaded", () => {
       age: "52세",
       occupation: "Station Attendant / Night Supervisor",
       occupationKr: "할로슬랍 스테이션 야간 역무원",
-      image: "https://picsum.photos/seed/leonard/200/300",
+      image: "/static/images/leonard_graves/메인.png",
       description:
         "30년째 할로슬랍 스테이션에서 근무 중인 베테랑 역무원. 철도청 구조조정으로 이번 달 말 퇴직 예정. 성실하고 과묵하지만 과거에 집착하는 완벽주의자로, 역을 '자신의 마지막 집'처럼 여기고 있다.",
     },
@@ -39,7 +39,7 @@ document.addEventListener("DOMContentLoaded", () => {
       age: "68세",
       occupation: "Former Train Engineer",
       occupationKr: "전직 기관사 / 현재 노숙자",
-      image: "https://picsum.photos/seed/walter/200/300",
+      image: "/static/images/walter_bridges/메인.png",
       description:
         "할로슬랍 스테이션에서 15년간 근무한 전직 기관사. 10년 전 사고의 책임을 떠안고 조기 퇴직 후, 교통사고로 가족을 잃고 삶이 붕괴. 현재는 역 근처 대합실에서 지내며 지역 사람들 사이에서 '역의 유령'이라 불린다.",
     },
@@ -49,7 +49,7 @@ document.addEventListener("DOMContentLoaded", () => {
       age: "26세",
       occupation: "Caregiver",
       occupationKr: "간병인 (시내 종합병원 야간 근무)",
-      image: "https://picsum.photos/seed/clara/200/300",
+      image: "/static/images/clara_hwang/메인.png",
       description:
         "홀어머니와 함께 외곽 마을에서 거주하며 도심 병원에서 야간 근무 중. 항상 밤 11시 30분 막차를 타고 귀가하는 할로슬랍 스테이션의 단골 통근자. 조용하고 성실한 이미지.",
     },
@@ -65,6 +65,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
       suspectTabs.forEach((t) => t.classList.remove("active"));
       tab.classList.add("active");
+
+      // Nathan 탭인 경우 특별 처리
+      if (suspectId === "nathan") {
+        loadNathanLog();
+        recoContainer.innerHTML =
+          "<p style='color: #ccc; padding: 10px;'>수사 기록을 확인하고 있습니다.</p>";
+        return;
+      }
 
       // 해당 용의자의 대화 로그 불러오기
       loadChatLog(suspectId);
@@ -152,17 +160,25 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function handleServerResponse(data) {
-    const { reply, sender, image, messages, additional_messages, questions_left, mode } = data;
+    const {
+      reply,
+      sender,
+      image,
+      messages,
+      additional_messages,
+      questions_left,
+      mode,
+    } = data;
 
     // 순차 연출이 필요한 경우 (초기 브리핑)
     if (messages && Array.isArray(messages)) {
       setLoading(true);
       for (const msg of messages) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise((resolve) => setTimeout(resolve, 2000));
         appendMessage(msg.sender, msg.reply, msg.image);
       }
       setLoading(false);
-    } 
+    }
     // [핵심 수정] 일반적인 단일 메시지 응답의 경우 (용의자 답변)
     else if (reply) {
       // async/await 없이 즉시 appendMessage를 호출합니다.
@@ -173,15 +189,19 @@ document.addEventListener("DOMContentLoaded", () => {
     if (additional_messages && Array.isArray(additional_messages)) {
       setLoading(true);
       for (const msg of additional_messages) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise((resolve) => setTimeout(resolve, 2000));
         appendMessage(msg.sender, msg.reply, msg.image);
       }
       setLoading(false);
     }
-    
+
     // 공통 상태 업데이트는 모든 경우에 마지막으로 실행됩니다.
-    if (mode) { currentGameMode = mode; }
-    if (questions_left !== undefined) { updateQuestionsLeftUI(questions_left); }
+    if (mode) {
+      currentGameMode = mode;
+    }
+    if (questions_left !== undefined) {
+      updateQuestionsLeftUI(questions_left);
+    }
   }
 
   function updateQuestionsLeftUI(count) {
@@ -226,7 +246,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       const data = await response.json();
 
-      appendMessage(data.sender, data.final_statement);
+      appendMessage(data.sender, data.final_statement, data.image);
 
       if (data.result === "success") {
         appendMessage(
@@ -271,7 +291,7 @@ document.addEventListener("DOMContentLoaded", () => {
         img.src = `/${imageInfo.path}`;
         img.alt = imageInfo.alt || "관련 이미지";
         img.style.maxWidth = "100%";
-                
+
         img.style.maxHeight = "400px"; // 이미지의 최대 높이를 400px로 제한합니다.
         img.style.objectFit = "contain"; // 이미지가 비율을 유지하며 컨테이너 안에 맞춰지도록 설정합니다.
 
@@ -292,12 +312,17 @@ document.addEventListener("DOMContentLoaded", () => {
     // '띡' 내려가는 대신, 부드럽게 스크롤되도록 변경합니다.
     chatLog.scrollTo({
       top: chatLog.scrollHeight,
-      behavior: 'smooth'
+      behavior: "smooth",
     });
     // --------------------
 
+    // Nathan/System 메시지는 항상 수사 기록에 저장
+    if (sender === "nathan" || sender === "system") {
+      saveNathanLog(sender, text, imageInfo);
+    }
+
     // [2차 업그레이드 핵심] 팀원의 대화 로그 저장 기능을 여기에 추가.
-    if (currentSuspectId) {
+    if (currentSuspectId && currentSuspectId !== "nathan") {
       saveChatLog(currentSuspectId, sender, text, imageInfo);
     }
   }
@@ -476,9 +501,53 @@ document.addEventListener("DOMContentLoaded", () => {
         const key = getStorageKey(suspectId);
         localStorage.removeItem(key);
       });
+      // Nathan 로그도 초기화
+      localStorage.removeItem("chat_log_nathan");
       console.log("모든 대화 로그가 초기화되었습니다.");
     } catch (err) {
       console.error("로컬스토리지 초기화 에러:", err);
+    }
+  }
+
+  // Nathan 수사 기록 전용 함수들
+  function saveNathanLog(sender, text, imageInfo = null) {
+    try {
+      const key = "chat_log_nathan";
+      let logs = JSON.parse(localStorage.getItem(key) || "[]");
+
+      logs.push({
+        sender: sender,
+        text: text,
+        imageInfo: imageInfo,
+        timestamp: Date.now(),
+      });
+
+      localStorage.setItem(key, JSON.stringify(logs));
+    } catch (err) {
+      console.error("Nathan 로그 저장 에러:", err);
+    }
+  }
+
+  function loadNathanLog() {
+    try {
+      chatLog.innerHTML = ""; // 화면 초기화
+
+      const key = "chat_log_nathan";
+      const logs = JSON.parse(localStorage.getItem(key) || "[]");
+
+      if (logs.length === 0) {
+        chatLog.innerHTML =
+          "<div style='color: #ccc; padding: 20px; text-align: center;'>아직 수사 기록이 없습니다.</div>";
+        return;
+      }
+
+      logs.forEach((log) => {
+        appendMessageWithoutSave(log.sender, log.text, log.imageInfo);
+      });
+
+      chatLog.scrollTop = chatLog.scrollHeight;
+    } catch (err) {
+      console.error("Nathan 로그 로드 에러:", err);
     }
   }
 
@@ -519,7 +588,14 @@ document.addEventListener("DOMContentLoaded", () => {
     // 2. 서버에 새로운 게임 시작을 요청
     await fetch("/api/start_new_game", { method: "POST" });
 
-    // 3. 초기 메시지(init)를 보내 Nathan의 브리핑을 받음
+    // 3. Nathan 탭을 기본으로 활성화
+    currentSuspectId = "nathan";
+    const nathanTab = document.querySelector('[data-suspect-id="nathan"]');
+    if (nathanTab) {
+      nathanTab.classList.add("active");
+    }
+
+    // 4. 초기 메시지(init)를 보내 Nathan의 브리핑을 받음
     sendMessage(true);
   }
 
