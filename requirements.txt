@@ -13,5 +13,3 @@ langchain-openai
 # Utilities
 python-dotenv==1.0.1
 
-
-gunicorn

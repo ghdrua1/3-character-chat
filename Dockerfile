@@ -30,11 +30,9 @@ ENV PORT=5000
 # 포트 노출
 EXPOSE 5000
 
-# 헬스체크 설정 (PORT 환경변수 사용, 기본값 5000)
+# 헬스체크 설정 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-    CMD ["/bin/sh", "-c", "python -c \"import urllib.request, os; port = os.getenv('PORT', '5000'); urllib.request.urlopen(f'http://localhost:{port}/health')\""]
+     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')" || exit 1
 
-# 애플리케이션 실행 (gunicorn 사용)
-# Render와 동일하게 gunicorn으로 실행, PORT 환경변수 사용
-# 쉘 형식 사용으로 환경변수 치환 가능
-CMD ["/bin/sh", "-c", "gunicorn app:app --bind 0.0.0.0:${PORT:-5000} --workers 2 --timeout 120"]
+# 애플리케이션 실행
+CMD ["python", "app.py"]
