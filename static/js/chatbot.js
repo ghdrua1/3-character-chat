@@ -151,19 +151,37 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function handleServerResponse(data) {
-    // 서버 응답에서 'image' 객체를 추출합니다.
-    const { reply, sender, questions_left, mode, image } = data;
-    // appendMessage에 'image' 객체를 세 번째 인자로 전달합니다.
-    appendMessage(sender || "bot", reply, image);
+  async function handleServerResponse(data) {
+    const { reply, sender, image, messages, additional_messages, questions_left, mode } = data;
 
-    if (mode) {
-      currentGameMode = mode;
+    // 순차 연출이 필요한 경우 (초기 브리핑)
+    if (messages && Array.isArray(messages)) {
+      setLoading(true);
+      for (const msg of messages) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        appendMessage(msg.sender, msg.reply, msg.image);
+      }
+      setLoading(false);
+    } 
+    // [핵심 수정] 일반적인 단일 메시지 응답의 경우 (용의자 답변)
+    else if (reply) {
+      // async/await 없이 즉시 appendMessage를 호출합니다.
+      appendMessage(sender, reply, image);
     }
 
-    if (questions_left !== undefined) {
-      updateQuestionsLeftUI(questions_left);
+    // 중간 보고는 위와 독립적으로, 추가적으로 순차 연출이 필요합니다.
+    if (additional_messages && Array.isArray(additional_messages)) {
+      setLoading(true);
+      for (const msg of additional_messages) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        appendMessage(msg.sender, msg.reply, msg.image);
+      }
+      setLoading(false);
     }
+    
+    // 공통 상태 업데이트는 모든 경우에 마지막으로 실행됩니다.
+    if (mode) { currentGameMode = mode; }
+    if (questions_left !== undefined) { updateQuestionsLeftUI(questions_left); }
   }
 
   function updateQuestionsLeftUI(count) {
@@ -253,6 +271,10 @@ document.addEventListener("DOMContentLoaded", () => {
         img.src = `/${imageInfo.path}`;
         img.alt = imageInfo.alt || "관련 이미지";
         img.style.maxWidth = "100%";
+                
+        img.style.maxHeight = "400px"; // 이미지의 최대 높이를 400px로 제한합니다.
+        img.style.objectFit = "contain"; // 이미지가 비율을 유지하며 컨테이너 안에 맞춰지도록 설정합니다.
+
         img.style.borderRadius = "8px";
         img.style.marginBottom = "8px";
         img.style.cursor = "pointer";
@@ -266,7 +288,13 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     chatLog.appendChild(messageElem);
-    chatLog.scrollTop = chatLog.scrollHeight;
+    // --- [핵심 수정] ---
+    // '띡' 내려가는 대신, 부드럽게 스크롤되도록 변경합니다.
+    chatLog.scrollTo({
+      top: chatLog.scrollHeight,
+      behavior: 'smooth'
+    });
+    // --------------------
 
     // [2차 업그레이드 핵심] 팀원의 대화 로그 저장 기능을 여기에 추가.
     if (currentSuspectId) {
