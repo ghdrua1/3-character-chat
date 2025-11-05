@@ -151,24 +151,35 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function handleServerResponse(data) {
-    const { reply, sender, image, messages, nathan_report, questions_left, mode } = data;
+  async function handleServerResponse(data) {
+    const { reply, sender, image, messages, additional_messages, questions_left, mode } = data;
 
-    // 'messages' 배열이 오면, 그걸 순서대로 전부 보여줍니다.
+    // 순차 연출이 필요한 경우 (초기 브리핑)
     if (messages && Array.isArray(messages)) {
+      setLoading(true);
       for (const msg of messages) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
         appendMessage(msg.sender, msg.reply, msg.image);
       }
-    } else if (reply) {
-      // 'messages'가 없으면, 기존처럼 단일 메시지를 보여줍니다.
+      setLoading(false);
+    } 
+    // [핵심 수정] 일반적인 단일 메시지 응답의 경우 (용의자 답변)
+    else if (reply) {
+      // async/await 없이 즉시 appendMessage를 호출합니다.
       appendMessage(sender, reply, image);
     }
 
-    // 중간 보고는 위와 독립적으로 처리됩니다.
-    if (nathan_report) {
-      appendMessage(nathan_report.sender, nathan_report.reply, nathan_report.image);
+    // 중간 보고는 위와 독립적으로, 추가적으로 순차 연출이 필요합니다.
+    if (additional_messages && Array.isArray(additional_messages)) {
+      setLoading(true);
+      for (const msg of additional_messages) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        appendMessage(msg.sender, msg.reply, msg.image);
+      }
+      setLoading(false);
     }
     
+    // 공통 상태 업데이트는 모든 경우에 마지막으로 실행됩니다.
     if (mode) { currentGameMode = mode; }
     if (questions_left !== undefined) { updateQuestionsLeftUI(questions_left); }
   }
@@ -277,7 +288,13 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     chatLog.appendChild(messageElem);
-    chatLog.scrollTop = chatLog.scrollHeight;
+    // --- [핵심 수정] ---
+    // '띡' 내려가는 대신, 부드럽게 스크롤되도록 변경합니다.
+    chatLog.scrollTo({
+      top: chatLog.scrollHeight,
+      behavior: 'smooth'
+    });
+    // --------------------
 
     // [2차 업그레이드 핵심] 팀원의 대화 로그 저장 기능을 여기에 추가.
     if (currentSuspectId) {

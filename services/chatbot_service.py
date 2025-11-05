@@ -40,113 +40,114 @@ class ChatbotService:
         }
         print(f"--- 새로운 게임 시작 --- 범인은 '{killer}' 입니다.")
     def generate_response(self, user_message: str, suspect_id: str = None) -> dict:
+        # 1. 상황에 맞는 핸들러를 호출하여 결과를 받습니다.
         if user_message.strip().lower() == "init":
-            return self._handle_briefing(user_message)
-        
-        current_mode = self.game_session.get("mode")
-        
-        # [수정] 범용 이미지 시스템이 적용된 새로운 중간 보고 로직입니다.
-        if current_mode == "interrogation" and self.game_session.get("questions_left") == 8 and not self.game_session.get("mid_report_done"):
-            self.game_session["mid_report_done"] = True
-            killer = self.game_session["killer"]
-            mid_game_script = self.game_session["nathan_script"]["mid_game_report"]
-            
-            report_part1_text = mid_game_script["lead_in"]
-            report_part2_text = f"{mid_game_script['second_lead_in']}\n\n[결정적 단서]: {mid_game_script[killer]}"
-            nathan_report = f"{report_part1_text}\n{report_part2_text}"
-            
-            report_image_info = mid_game_script.get("image")
-            
-            return {
-                "reply": nathan_report, "sender": "nathan", "image": report_image_info,
-                "questions_left": self.game_session.get("questions_left"),
-                "mode": current_mode
-            }
-        
-        handler_result = {}
-        if current_mode == "error":
-            handler_result = {"reply": f"게임 초기화 오류: {self.game_session.get('error_message')}", "sender": "system"}
-        elif current_mode == "briefing":
             handler_result = self._handle_briefing(user_message)
-        elif current_mode == "interrogation":
-            if not suspect_id:
-                handler_result = {"reply": "심문할 용의자를 선택해 주십시오.", "sender": "system"}
+        else:
+            current_mode = self.game_session.get("mode")
+            if current_mode == "briefing":
+                handler_result = self._handle_briefing(user_message)
+            elif current_mode == "interrogation":
+                if not suspect_id:
+                    handler_result = {"reply": "심문할 용의자를 선택해 주십시오.", "sender": "system"}
+                else:
+                    handler_result = self._handle_interrogation(user_message, suspect_id)
             else:
-                handler_result = self._handle_interrogation(user_message, suspect_id)
-        else:
-             handler_result = {"reply": "게임 모드 설정에 오류가 발생했습니다.", "sender": "system"}
+                handler_result = {"reply": "게임 모드 설정에 오류가 발생했습니다.", "sender": "system"}
 
-
-        # [최종 수정] _handle_briefing이 반환한 'messages' 배열을 처리합니다.
-        if 'messages' in handler_result:
-            final_response = {
-                "messages": handler_result.get("messages")
-            }
-        else:
-            final_response = {
-                "reply": handler_result.get("reply"),
-                "sender": handler_result.get("sender"),
-                "image": handler_result.get("image")
-            }
-        
-        # 공통 상태 정보를 추가합니다.
+        # 2. 핸들러가 반환한 결과에 최신 상태 정보만 덧붙여 최종 응답을 완성합니다.
+        final_response = handler_result.copy()
         final_response["questions_left"] = self.game_session.get("questions_left", 0)
         final_response["mode"] = self.game_session.get("mode")
-            
+
         return final_response
 # services/chatbot_service.py 파일에서 _handle_briefing 함수를 아래 코드로 교체하세요.
 
     def _handle_briefing(self, user_message: str) -> dict:
         script_briefing = self.game_session["nathan_script"]["briefing"]
         
-        # init 요청 시, 네이선 자기소개 장면(scenes)을 보냅니다.
         if user_message.strip().lower() == "init":
             initial_scenes = script_briefing.get("scenes", [])
             return { "messages": initial_scenes }
         
-        # '알겠습니다' 요청 시, 상세 보고 장면(report_scenes)을 보냅니다.
         if any(keyword in user_message.lower() for keyword in ["알겠습니다", "알겠", "시작", "네", "계속"]):
             self.game_session["mode"] = "interrogation"
             
-            report_scenes_array = script_briefing.get("report_scenes", [])
-            
-            return { "messages": report_scenes_array }
+            report_scenes_template = script_briefing.get("report_scenes", [])
+            killer = self.game_session.get("killer") # 현재 게임의 범인을 가져옵니다.
 
-        # 위 조건에 해당하지 않으면, 단일 메시지를 반환합니다.
+            processed_scenes = []
+            for scene in report_scenes_template:
+                scene_copy = scene.copy() # 원본 데이터 수정을 방지하기 위해 복사
+                
+                # [핵심 수정] 'conditional_image' 키가 있는지 확인합니다.
+                if "conditional_image" in scene_copy:
+                    image_options = scene_copy.pop("conditional_image") # conditional_image는 제거
+                    
+                    # 범인에 맞는 이미지를 선택하거나, 없으면 default 이미지를 사용합니다.
+                    image_to_use = image_options.get(killer, image_options.get("default"))
+                    
+                    if image_to_use:
+                        scene_copy["image"] = image_to_use # 최종적으로 'image' 키에 할당
+                
+                processed_scenes.append(scene_copy)
+
+            return {
+                "messages": processed_scenes,
+                "mode": "interrogation"
+            }
+
         return {"reply": "준비되시면 '알겠습니다'라고 말씀해주십시오.", "sender": "nathan"}
-    
     
     def _handle_interrogation(self, user_message: str, suspect_id: str) -> dict:
         try:
             if self.game_session["questions_left"] <= 0:
                 return {"reply": "더 이상 질문할 수 없습니다. 이제 범인을 지목해야 합니다.", "sender": "system", "image": None}
-            
+
+            # --- 용의자 답변 생성 (기존 로직) ---
             is_killer = (self.game_session["killer"] == suspect_id)
             suspect_config = self._load_suspect_config(suspect_id)
             knowledge_base = self.game_session["active_knowledge"][suspect_id]
-            
             retrieved_doc = self._search_similar(user_message, knowledge_base)
-            
-            # [수정] 이미지 '객체'를 통째로 추출합니다.
             image_info_to_show = retrieved_doc.get("image") if retrieved_doc else None
-            
             system_prompt = suspect_config['system_prompt_killer'] if is_killer else suspect_config['system_prompt_innocent']
             history = self._get_conversation_history(suspect_id, user_message)
             final_prompt = self._build_final_prompt(suspect_config, system_prompt, history, user_message, retrieved_doc)
-            
-            print("======== FINAL PROMPT TO LLM ========"); print(final_prompt); print("=====================================")
-
             response = self.client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "user", "content": final_prompt}], temperature=0.7, max_tokens=300)
             reply = response.choices[0].message.content.strip()
             
+            # --- 상태 업데이트 (기존 로직) ---
             self.game_session["questions_left"] -= 1
             self._save_to_history(suspect_id, user_message, reply)
+
+            # --- [핵심 수정] 최종 응답 구성 ---
+            # 1. 먼저 용의자의 답변을 기본 응답 객체에 담습니다.
+            final_response = {"reply": reply, "sender": suspect_id, "image": image_info_to_show}
+
+            # 2. 그 직후, 남은 질문이 8개인지(7번 질문이 끝난 상태인지) 확인합니다.
+            if self.game_session.get("questions_left") == 8 and not self.game_session.get("mid_report_done"):
+                self.game_session["mid_report_done"] = True
+                killer = self.game_session["killer"]
+                mid_game_report_scenes = self.game_session["nathan_script"]["mid_game_report"]
+                
+                processed_scenes = []
+                for scene in mid_game_report_scenes:
+                    scene_copy = scene.copy()
+                    if "conditional_content" in scene_copy:
+                        content = scene_copy.pop("conditional_content")[killer]
+                        # conditional_content의 text와 image를 scene_copy에 합칩니다.
+                        scene_copy["reply"] = scene_copy.get("reply", "") + content.get("text", "")
+                        scene_copy["image"] = content.get("image")
+                    processed_scenes.append(scene_copy)
+                
+                # 'additional_messages' 키에 순차적으로 보여줄 보고 내용을 담습니다.
+                final_response["additional_messages"] = processed_scenes
             
-            # [수정] 최종 반환 객체에 이미지 '객체'를 포함합니다.
-            return {"reply": reply, "sender": suspect_id, "image": image_info_to_show}
+            return final_response
+            
         except Exception as e:
             import traceback; traceback.print_exc()
-            return {"reply": "죄송합니다. 생각에 잠시 오류가 생긴 것 같습니다...", "sender": suspect_id, "image": None}
+            return {"reply": "죄송합니다. 생각에 잠시 오류가 생긴 것 같습니다...", "sender": "suspect_id", "image": None}
 # services/chatbot_service.py 의 make_accusation 함수
 
     def make_accusation(self, accused_suspect_id: str) -> dict:
