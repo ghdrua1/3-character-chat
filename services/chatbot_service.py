@@ -109,12 +109,25 @@ class ChatbotService:
             suspect_config = self._load_suspect_config(suspect_id)
             knowledge_base = self.game_session["active_knowledge"][suspect_id]
             retrieved_doc = self._search_similar(user_message, knowledge_base)
-            image_info_to_show = retrieved_doc.get("image") if retrieved_doc else None
+            
+            # 증거 이미지가 있으면 우선 사용, 없으면 감정 이미지 사용
+            evidence_image = retrieved_doc.get("image") if retrieved_doc else None
+            
             system_prompt = suspect_config['system_prompt_killer'] if is_killer else suspect_config['system_prompt_innocent']
             history = self._get_conversation_history(suspect_id, user_message)
             final_prompt = self._build_final_prompt(suspect_config, system_prompt, history, user_message, retrieved_doc)
             response = self.client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "user", "content": final_prompt}], temperature=0.7, max_tokens=300)
             reply = response.choices[0].message.content.strip()
+            
+            # --- 감정 분석 및 이미지 선택 ---
+            if evidence_image:
+                # 증거 이미지가 있으면 우선 사용
+                image_info_to_show = evidence_image
+            else:
+                # 증거 이미지가 없으면 감정 이미지 사용
+                emotion = self._analyze_emotion(reply, suspect_id)
+                emotion_image = self._get_emotion_image(suspect_id, emotion)
+                image_info_to_show = emotion_image
             
             # --- 상태 업데이트 (기존 로직) ---
             self.game_session["questions_left"] -= 1
@@ -207,11 +220,16 @@ class ChatbotService:
 
         response = self.client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "user", "content": final_prompt}], temperature=0.7, max_tokens=500)
         final_statement = response.choices[0].message.content.strip()
+        
+        # 감정 분석 및 이미지 추가
+        emotion = self._analyze_emotion(final_statement, accused_suspect_id)
+        emotion_image = self._get_emotion_image(accused_suspect_id, emotion)
 
         return {
             "result": "success" if is_correct else "failure",
             "final_statement": final_statement,
             "sender": sender_id,
+            "image": emotion_image,
             "is_game_over": True
         }
     def get_recommended_questions(self, suspect_id: str) -> list:
@@ -394,6 +412,90 @@ class ChatbotService:
         if not file_path.exists(): return None
         try: return json.loads(file_path.read_text(encoding='utf-8'))
         except: return None
+
+    def _analyze_emotion(self, reply_text: str, suspect_id: str) -> str:
+        """
+        용의자의 답변 텍스트를 분석하여 감정을 판단합니다.
+        """
+        try:
+            prompt = f"""
+다음 용의자의 답변 텍스트에서 가장 지배적인 감정을 하나만 선택하세요.
+
+답변: "{reply_text}"
+
+선택 가능한 감정 (하나만 선택):
+- 분노: 화가 나거나 공격적인 상태
+- 긴장: 불안하거나 초조한 상태
+- 슬픔: 우울하거나 비통한 상태
+- 불안: 걱정되거나 두려운 상태
+- 눈물: 울거나 매우 슬픈 상태
+- 중립: 특별한 감정이 드러나지 않는 평온한 상태
+
+응답은 반드시 위 감정 중 하나의 단어로만 답하세요 (예: 분노, 긴장, 슬픔, 불안, 눈물, 중립).
+"""
+            
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                max_tokens=10
+            )
+            
+            emotion = response.choices[0].message.content.strip()
+            print(f"[DEBUG] {suspect_id} 감정 분석: {emotion}")
+            return emotion
+            
+        except Exception as e:
+            print(f"[ERROR] 감정 분석 실패: {e}")
+            return "중립"
+    
+    def _get_emotion_image(self, suspect_id: str, emotion: str) -> dict:
+        """
+        용의자 ID와 감정에 맞는 이미지 경로를 반환합니다.
+        """
+        # 용의자별 사용 가능한 이미지 매핑
+        emotion_images_map = {
+            'leonard': {
+                '분노': '분노.png',
+                '긴장': '긴장.png',
+                '역무실': '역무실.png',
+                '중립': '메인.png'
+            },
+            'walter': {
+                '분노': '분노.png',
+                '슬픔': '슬픔.png',
+                '눈물': '슬픔.png',  # 눈물은 슬픔 이미지 사용
+                '중립': '메인.png'
+            },
+            'clara': {
+                '분노': '분노.png',
+                '불안': '불안.png',
+                '눈물': '눈물.png',
+                '긴장': '불안.png',  # 긴장은 불안 이미지 사용
+                '중립': '메인.png'
+            }
+        }
+        
+        suspect_folder_map = {
+            'leonard': 'leonard_graves',
+            'walter': 'walter_bridges',
+            'clara': 'clara_hwang'
+        }
+        
+        # 용의자의 감정 이미지 맵 가져오기
+        suspect_emotions = emotion_images_map.get(suspect_id, {})
+        
+        # 감정에 맞는 이미지 찾기, 없으면 중립(메인) 이미지 사용
+        image_filename = suspect_emotions.get(emotion, suspect_emotions.get('중립', '메인.png'))
+        
+        # 전체 경로 생성
+        folder_name = suspect_folder_map.get(suspect_id, suspect_id)
+        image_path = f"static/images/{folder_name}/{image_filename}"
+        
+        return {
+            "path": image_path,
+            "alt": f"{suspect_id}의 {emotion} 표정"
+        }
 
     def _load_nathan_script(self) -> dict:
         return self._load_json_file(BASE_DIR / "static/data/chatbot/case_files/nathan_hale_script.json")

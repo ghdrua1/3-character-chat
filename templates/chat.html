@@ -79,6 +79,17 @@
         color: #fff;
         border-color: #fff;
       }
+      .suspect-tab.nathan-tab {
+        background-color: #4a4a4a;
+        border: 2px solid #6b7a8a;
+      }
+      .suspect-tab.nathan-tab:hover {
+        background-color: #5a5a5a;
+      }
+      .suspect-tab.nathan-tab.active {
+        background-color: #6b7a8a;
+        border: 2px solid #8a9aaa;
+      }
       .recommendations {
         margin-top: 10px;
       }
@@ -132,6 +143,7 @@
         line-height: 1.5;
         word-break: break-word;
       }
+
       .message.user {
         background-color: #4a6b8a;
         align-self: flex-end;
@@ -142,6 +154,10 @@
         background-color: #3a3a3b;
         align-self: flex-start;
         color: #fff;
+      }
+
+      .message.bot img {
+        height: 300px;
       }
       .sender-name {
         font-weight: normal;
@@ -282,8 +298,6 @@
       .suspect-info-image {
         width: 120px;
         height: 120px;
-        border: 3px solid #000;
-        box-shadow: 0 3px 0 #000;
         flex-shrink: 0;
         object-fit: cover;
         image-rendering: pixelated;
@@ -347,6 +361,9 @@
     <div class="chat-container" data-username="{{ username }}">
       <aside class="sidebar">
         <div class="suspect-tabs">
+          <div class="suspect-tab nathan-tab" data-suspect-id="nathan">
+            수사 기록
+          </div>
           <div class="suspect-tab" data-suspect-id="leonard">
             Leonard Graves
           </div>
