@@ -656,6 +656,17 @@
               detectiveSection.classList.remove("section-hidden");
               detectiveImageContainer.classList.remove("section-hidden");
 
+              // Play detective theme music
+              const detectiveMusic = document.getElementById("detectiveMusic");
+              if (detectiveMusic) {
+                detectiveMusic.volume = 0.6;
+                detectiveMusic
+                  .play()
+                  .catch((error) =>
+                    console.log("Detective music playback failed:", error)
+                  );
+              }
+
               // Start typing detective context
               const detectiveContent =
                 document.getElementById("detective-content");
@@ -702,5 +713,11 @@
         );
       });
     </script>
+
+    <!-- Detective Theme Music -->
+    <audio id="detectiveMusic">
+      <source src="/static/mp3/conan.mp3" type="audio/mpeg" />
+      Your browser does not support the audio element.
+    </audio>
   </body>
 </html>
