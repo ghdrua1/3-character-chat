@@ -41,10 +41,15 @@ def chat():
 
 @app.route('/api/start_new_game', methods=['POST'])
 def start_new_game():
-    # Flask 세션에서 session_id 가져오기 또는 생성
-    if 'session_id' not in session:
-        session['session_id'] = str(uuid.uuid4())
-    session_id = session['session_id']
+    # 프론트엔드에서 전송한 탭별 세션 ID 우선 사용
+    tab_session_id = request.headers.get('X-Tab-Session-ID')
+    if tab_session_id:
+        session_id = tab_session_id
+    else:
+        # 하위 호환성: Flask 세션에서 session_id 가져오기 또는 생성
+        if 'session_id' not in session:
+            session['session_id'] = str(uuid.uuid4())
+        session_id = session['session_id']
     
     from services import get_chatbot_service
     chatbot = get_chatbot_service()
@@ -54,10 +59,15 @@ def start_new_game():
 @app.route('/api/chat', methods=['POST'])
 def api_chat():
     try:
-        # Flask 세션에서 session_id 가져오기 또는 생성
-        if 'session_id' not in session:
-            session['session_id'] = str(uuid.uuid4())
-        session_id = session['session_id']
+        # 프론트엔드에서 전송한 탭별 세션 ID 우선 사용
+        tab_session_id = request.headers.get('X-Tab-Session-ID')
+        if tab_session_id:
+            session_id = tab_session_id
+        else:
+            # 하위 호환성: Flask 세션에서 session_id 가져오기 또는 생성
+            if 'session_id' not in session:
+                session['session_id'] = str(uuid.uuid4())
+            session_id = session['session_id']
         
         data = request.get_json()
         user_message = data.get('message', '')
@@ -85,10 +95,15 @@ def api_recommendations():
 @app.route('/api/accuse', methods=['POST'])
 def api_accuse():
     try:
-        # Flask 세션에서 session_id 가져오기 또는 생성
-        if 'session_id' not in session:
-            session['session_id'] = str(uuid.uuid4())
-        session_id = session['session_id']
+        # 프론트엔드에서 전송한 탭별 세션 ID 우선 사용
+        tab_session_id = request.headers.get('X-Tab-Session-ID')
+        if tab_session_id:
+            session_id = tab_session_id
+        else:
+            # 하위 호환성: Flask 세션에서 session_id 가져오기 또는 생성
+            if 'session_id' not in session:
+                session['session_id'] = str(uuid.uuid4())
+            session_id = session['session_id']
         
         data = request.get_json()
         accused_suspect_id = data.get('suspect_id')

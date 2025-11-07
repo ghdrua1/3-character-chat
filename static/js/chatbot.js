@@ -17,6 +17,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const accuseModal = document.getElementById("accuse-modal");
   const suspectSelectBtns = document.querySelectorAll(".suspect-select-btn");
 
+  // 탭별 고유 ID 생성 (sessionStorage 사용 - 탭별로 독립적)
+  let tabSessionId = sessionStorage.getItem('tab_session_id');
+  if (!tabSessionId) {
+    tabSessionId = 'tab_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    sessionStorage.setItem('tab_session_id', tabSessionId);
+  }
+  console.log('[탭 세션 ID]', tabSessionId);
+
   let currentSuspectId = null;
   let isLoading = false;
   let currentGameMode = "briefing";
@@ -138,7 +146,10 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "X-Tab-Session-ID": tabSessionId  // 탭별 세션 ID 전송
+        },
         body: JSON.stringify({
           message: message,
           suspect_id: currentSuspectId,
@@ -244,7 +255,10 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       const response = await fetch("/api/accuse", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "X-Tab-Session-ID": tabSessionId  // 탭별 세션 ID 전송
+        },
         body: JSON.stringify({ suspect_id: accusedId }),
       });
       const data = await response.json();
@@ -612,7 +626,12 @@ document.addEventListener("DOMContentLoaded", () => {
     clearAllChatLogs();
 
     // 2. 서버에 새로운 게임 시작을 요청 (대기하지 않고 비동기 전송)
-    fetch("/api/start_new_game", { method: "POST" }).catch(() => {});
+    fetch("/api/start_new_game", { 
+      method: "POST",
+      headers: {
+        "X-Tab-Session-ID": tabSessionId  // 탭별 세션 ID 전송
+      }
+    }).catch(() => {});
 
     // 3. Nathan 탭을 기본으로 활성화
     currentSuspectId = "nathan";
