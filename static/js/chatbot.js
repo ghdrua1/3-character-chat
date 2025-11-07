@@ -301,7 +301,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       userMessageInput.placeholder =
-        "게임이 종료되었습니다. 새로고침하여 다시 시작하세요.";
+        "게임이 종료되었습니다. 새로운 게임을 원하시면 새로운 탭에서 다시 시작하거나 강력새로고침하세요. (Ctrl + Shift + R)";
       if (accuseBtn) accuseBtn.style.display = "none";
     } catch (err) {
       console.error("범인 지목 에러:", err);
