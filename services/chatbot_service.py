@@ -38,69 +38,123 @@ class ChatbotService:
             )
         )
         
-        self.game_session = {}
-        # 용의자별 벡터 DB 구축 여부/빌드중 캐시
+        # 사용자별 게임 세션 저장소 (session_id: game_session)
+        # 각 세션에는 마지막 접근 시간(last_access_time)도 포함됩니다.
+        self.game_sessions: dict[str, dict] = {}
+        # 용의자별 벡터 DB 구축 여부/빌드중 캐시 (전역 공유, 용의자별로 1회만 구축)
         self._vdb_built_for: set[str] = set()
         self._vdb_building: set[str] = set()
-        self.start_new_game()
-        print("[ChatbotService] 초기화 완료. 새로운 게임이 준비되었습니다.")
+        # 세션 만료 시간 (초): 2시간 동안 활동이 없으면 만료
+        self.session_timeout = 2 * 60 * 60  # 2시간
+        print("[ChatbotService] 초기화 완료.")
 
-    def start_new_game(self):
+    def start_new_game(self, session_id: str):
+        """특정 세션(session_id)에 대한 새로운 게임을 시작합니다."""
         suspect_ids = ['leonard', 'walter', 'clara']
-        killer = random.choice(suspect_ids)
+        killer = random.choice(suspect_ids)  # 각 세션마다 독립적으로 랜덤 범인 지정
         nathan_script = self._load_nathan_script()
         if nathan_script is None:
-            self.game_session = {"mode": "error", "error_message": "Nathan script not found."}
+            self.game_sessions[session_id] = {
+                "mode": "error", 
+                "error_message": "Nathan script not found.",
+                "last_access_time": time.time()
+            }
             return
         
         active_knowledge = self._create_active_knowledge(suspect_ids, killer)
         # 게임 시작 시에는 벡터DB를 즉시 구축하지 않고, 최초 심문 시점에 용의자별 1회 구축합니다.
-        self._vdb_built_for.clear()
-        self.game_session = {
+        # 벡터DB는 전역 공유이므로 _vdb_built_for는 초기화하지 않습니다.
+        self.game_sessions[session_id] = {
             "killer": killer, "nathan_script": nathan_script,
             "active_knowledge": active_knowledge, "history": {s_id: [] for s_id in suspect_ids},
             "mode": "briefing", "questions_left": 15,
-            "mid_report_done": False
+            "mid_report_done": False,
+            "last_access_time": time.time()  # 마지막 접근 시간 기록
         }
-        print(f"--- 새로운 게임 시작 --- 범인은 '{killer}' 입니다.")
+        print(f"[세션 {session_id}] --- 새로운 게임 시작 --- 범인은 '{killer}' 입니다.")
         # 브리핑에는 영향 없이, 백그라운드에서 프리워밍 시작
         threading.Thread(target=self._warmup_in_background, daemon=True).start()
-    def generate_response(self, user_message: str, suspect_id: str = None) -> dict:
+    
+    def _get_game_session(self, session_id: str) -> dict:
+        """세션의 게임 상태를 가져옵니다. 없으면 새 게임을 시작합니다."""
+        # 오래된 세션 정리
+        self._cleanup_expired_sessions()
+        
+        if session_id not in self.game_sessions:
+            self.start_new_game(session_id)
+        else:
+            # 세션 접근 시 마지막 접근 시간 업데이트
+            self.game_sessions[session_id]["last_access_time"] = time.time()
+        
+        return self.game_sessions[session_id]
+    
+    def _cleanup_expired_sessions(self):
+        """오래된 세션을 정리합니다."""
+        current_time = time.time()
+        expired_sessions = [
+            session_id for session_id, session_data in self.game_sessions.items()
+            if current_time - session_data.get("last_access_time", 0) > self.session_timeout
+        ]
+        
+        for session_id in expired_sessions:
+            del self.game_sessions[session_id]
+            print(f"[세션 정리] 만료된 세션 삭제: {session_id[:8]}...")
+    
+    def cleanup_session(self, session_id: str):
+        """특정 세션을 명시적으로 정리합니다 (게임 종료 시 호출 가능)."""
+        if session_id in self.game_sessions:
+            del self.game_sessions[session_id]
+            print(f"[세션 정리] 세션 삭제: {session_id[:8]}...")
+    def generate_response(self, user_message: str, suspect_id: str = None, session_id: str = None) -> dict:
+        # session_id가 없으면 기본값 사용 (하위 호환성)
+        if session_id is None:
+            session_id = "default"
+        
+        game_session = self._get_game_session(session_id)
+        current_mode = game_session.get("mode")
+        
         # 1. 상황에 맞는 핸들러를 호출하여 결과를 받습니다.
         if user_message.strip().lower() == "init":
-            handler_result = self._handle_briefing(user_message)
+            handler_result = self._handle_briefing(user_message, session_id)
         else:
-            current_mode = self.game_session.get("mode")
             if current_mode == "briefing":
-                handler_result = self._handle_briefing(user_message)
+                handler_result = self._handle_briefing(user_message, session_id)
             elif current_mode == "interrogation":
-                if not suspect_id:
+                # 심문 모드에서 Nathan 탭에서 메시지를 보낸 경우 안내 메시지
+                if suspect_id == "nathan":
+                    handler_result = {
+                        "reply": "수사 기록은 읽기 전용입니다. 각 용의자 탭을 선택하여 심문을 진행해주세요.",
+                        "sender": "system"
+                    }
+                elif not suspect_id:
                     handler_result = {"reply": "심문할 용의자를 선택해 주십시오.", "sender": "system"}
                 else:
-                    handler_result = self._handle_interrogation(user_message, suspect_id)
+                    handler_result = self._handle_interrogation(user_message, suspect_id, session_id)
             else:
                 handler_result = {"reply": "게임 모드 설정에 오류가 발생했습니다.", "sender": "system"}
 
         # 2. 핸들러가 반환한 결과에 최신 상태 정보만 덧붙여 최종 응답을 완성합니다.
         final_response = handler_result.copy()
-        final_response["questions_left"] = self.game_session.get("questions_left", 0)
-        final_response["mode"] = self.game_session.get("mode")
+        game_session = self._get_game_session(session_id)  # 최신 상태 다시 가져오기
+        final_response["questions_left"] = game_session.get("questions_left", 0)
+        final_response["mode"] = game_session.get("mode")
 
         return final_response
 # services/chatbot_service.py 파일에서 _handle_briefing 함수를 아래 코드로 교체하세요.
 
-    def _handle_briefing(self, user_message: str) -> dict:
-        script_briefing = self.game_session["nathan_script"]["briefing"]
+    def _handle_briefing(self, user_message: str, session_id: str) -> dict:
+        game_session = self._get_game_session(session_id)
+        script_briefing = game_session["nathan_script"]["briefing"]
         
         if user_message.strip().lower() == "init":
             initial_scenes = script_briefing.get("scenes", [])
             return { "messages": initial_scenes }
         
         if any(keyword in user_message.lower() for keyword in ["알겠습니다", "알겠", "시작", "네", "계속"]):
-            self.game_session["mode"] = "interrogation"
+            game_session["mode"] = "interrogation"
             
             report_scenes_template = script_briefing.get("report_scenes", [])
-            killer = self.game_session.get("killer") # 현재 게임의 범인을 가져옵니다.
+            killer = game_session.get("killer") # 현재 게임의 범인을 가져옵니다.
 
             processed_scenes = []
             for scene in report_scenes_template:
@@ -125,26 +179,27 @@ class ChatbotService:
 
         return {"reply": "준비되시면 '알겠습니다'라고 말씀해주십시오.", "sender": "nathan"}
     
-    def _handle_interrogation(self, user_message: str, suspect_id: str) -> dict:
+    def _handle_interrogation(self, user_message: str, suspect_id: str, session_id: str) -> dict:
         try:
-            if self.game_session["questions_left"] <= 0:
+            game_session = self._get_game_session(session_id)
+            if game_session["questions_left"] <= 0:
                 return {"reply": "더 이상 질문할 수 없습니다. 이제 범인을 지목해야 합니다.", "sender": "system", "image": None}
 
             # --- 용의자 답변 생성 (벡터 검색 RAG) ---
             # 벡터DB 보장: 해당 용의자 컬렉션이 없거나 아직 구축 전이면 지금 1회 구축
-            self._ensure_vector_db_for_suspect(suspect_id)
-            is_killer = (self.game_session["killer"] == suspect_id)
+            self._ensure_vector_db_for_suspect(suspect_id, session_id)
+            is_killer = (game_session["killer"] == suspect_id)
             suspect_config = self._load_suspect_config(suspect_id)
-            knowledge_base = self.game_session["active_knowledge"][suspect_id]
+            knowledge_base = game_session["active_knowledge"][suspect_id]
             retrieved_doc = self._search_similar(user_message, knowledge_base, suspect_id)
             
             # 증거 이미지가 있으면 우선 사용, 없으면 감정 이미지 사용
             evidence_image = retrieved_doc.get("image") if retrieved_doc else None
             
             system_prompt = suspect_config['system_prompt_killer'] if is_killer else suspect_config['system_prompt_innocent']
-            history = self._get_conversation_history(suspect_id, user_message)
+            history = self._get_conversation_history(suspect_id, user_message, session_id)
             final_prompt = self._build_final_prompt(suspect_config, system_prompt, history, user_message, retrieved_doc)
-            response = self.client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "user", "content": final_prompt}], temperature=0.7, max_tokens=300)
+            response = self.client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": final_prompt}], temperature=0.7, max_tokens=300)
             reply = response.choices[0].message.content.strip()
             
             # --- 감정 분석 및 이미지 선택 ---
@@ -158,18 +213,19 @@ class ChatbotService:
                 image_info_to_show = emotion_image
             
             # --- 상태 업데이트 (기존 로직) ---
-            self.game_session["questions_left"] -= 1
-            self._save_to_history(suspect_id, user_message, reply)
+            game_session["questions_left"] -= 1
+            game_session["last_access_time"] = time.time()  # 접근 시간 업데이트
+            self._save_to_history(suspect_id, user_message, reply, session_id)
 
             # --- [핵심 수정] 최종 응답 구성 ---
             # 1. 먼저 용의자의 답변을 기본 응답 객체에 담습니다.
             final_response = {"reply": reply, "sender": suspect_id, "image": image_info_to_show}
 
             # 2. 그 직후, 남은 질문이 8개인지(7번 질문이 끝난 상태인지) 확인합니다.
-            if self.game_session.get("questions_left") == 8 and not self.game_session.get("mid_report_done"):
-                self.game_session["mid_report_done"] = True
-                killer = self.game_session["killer"]
-                mid_game_report_scenes = self.game_session["nathan_script"]["mid_game_report"]
+            if game_session.get("questions_left") == 8 and not game_session.get("mid_report_done"):
+                game_session["mid_report_done"] = True
+                killer = game_session["killer"]
+                mid_game_report_scenes = game_session["nathan_script"]["mid_game_report"]
                 
                 processed_scenes = []
                 for scene in mid_game_report_scenes:
@@ -188,11 +244,15 @@ class ChatbotService:
             
         except Exception as e:
             import traceback; traceback.print_exc()
-            return {"reply": "죄송합니다. 생각에 잠시 오류가 생긴 것 같습니다...", "sender": "suspect_id", "image": None}
+            return {"reply": "죄송합니다. 생각에 잠시 오류가 생긴 것 같습니다...", "sender": "system", "image": None}
 # services/chatbot_service.py 의 make_accusation 함수
 
-    def make_accusation(self, accused_suspect_id: str) -> dict:
-        real_killer_id = self.game_session["killer"]
+    def make_accusation(self, accused_suspect_id: str, session_id: str = None) -> dict:
+        if session_id is None:
+            session_id = "default"
+        game_session = self._get_game_session(session_id)
+        game_session["last_access_time"] = time.time()  # 접근 시간 업데이트
+        real_killer_id = game_session["killer"]
         is_correct = (accused_suspect_id == real_killer_id)
         
         final_prompt = ""
@@ -246,7 +306,7 @@ class ChatbotService:
      - 진범의 범행 방식(어떻게): {confession_details.get('how')}
 """
 
-        response = self.client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "user", "content": final_prompt}], temperature=0.7, max_tokens=500)
+        response = self.client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": final_prompt}], temperature=0.7, max_tokens=500)
         final_statement = response.choices[0].message.content.strip()
         
         # 감정 분석 및 이미지 추가
@@ -517,7 +577,7 @@ class ChatbotService:
             import traceback
             traceback.print_exc()
 
-    def _ensure_vector_db_for_suspect(self, suspect_id: str):
+    def _ensure_vector_db_for_suspect(self, suspect_id: str, session_id: str = None):
         """심문 시작 전에 해당 용의자 컬렉션이 구축되었는지 확인하고, 필요 시 1회 구축합니다."""
         try:
             if suspect_id in self._vdb_built_for:
@@ -525,7 +585,15 @@ class ChatbotService:
             # 다른 스레드에서 빌드 중이면 반환
             if suspect_id in self._vdb_building:
                 return
-            knowledge_base = self.game_session.get("active_knowledge", {}).get(suspect_id, [])
+            # active_knowledge는 모든 세션에서 동일하므로 어떤 세션이든 사용 가능
+            if session_id and session_id in self.game_sessions:
+                game_session = self.game_sessions[session_id]
+            else:
+                # 세션이 없으면 임의의 세션에서 가져오거나 기본값 사용
+                game_session = next(iter(self.game_sessions.values())) if self.game_sessions else None
+                if not game_session:
+                    return
+            knowledge_base = game_session.get("active_knowledge", {}).get(suspect_id, [])
             if not knowledge_base:
                 return
             self._vdb_building.add(suspect_id)
@@ -542,13 +610,19 @@ class ChatbotService:
         try:
             # 아주 짧게 양보하여 초기 브리핑 트리거가 먼저 나가도록 함
             time.sleep(0.3)
-            suspects = list(self.game_session.get("active_knowledge", {}).keys())
-            for suspect_id in suspects:
-                if suspect_id in self._vdb_built_for:
-                    continue
-                self._ensure_vector_db_for_suspect(suspect_id)
-                # API 버스트 방지
-                time.sleep(0.1)
+            # 전역으로 관리되는 벡터DB는 한 번만 구축하면 되므로, 임의의 세션에서 active_knowledge를 가져옵니다.
+            # active_knowledge는 모든 세션에서 동일한 구조이므로 어떤 세션이든 상관없습니다.
+            any_session = next(iter(self.game_sessions.values())) if self.game_sessions else None
+            if any_session:
+                suspects = list(any_session.get("active_knowledge", {}).keys())
+                for suspect_id in suspects:
+                    if suspect_id in self._vdb_built_for:
+                        continue
+                    # active_knowledge는 세션별로 동일하므로 첫 번째 세션의 것을 사용
+                    knowledge_base = any_session["active_knowledge"][suspect_id]
+                    self._build_vector_db_for_suspect(suspect_id, knowledge_base)
+                    # API 버스트 방지
+                    time.sleep(0.1)
         except Exception:
             import traceback; traceback.print_exc()
     
@@ -651,16 +725,18 @@ class ChatbotService:
             traceback.print_exc()
             return None
 
-    def _get_conversation_history(self, suspect_id: str, current_user_message: str, limit: int = 4) -> str:
-        history = self.game_session["history"][suspect_id][-limit:]
+    def _get_conversation_history(self, suspect_id: str, current_user_message: str, session_id: str, limit: int = 4) -> str:
+        game_session = self._get_game_session(session_id)
+        history = game_session["history"][suspect_id][-limit:]
         suspect_config = self._load_suspect_config(suspect_id)
         suspect_name = suspect_config.get("name", "용의자")
         formatted_history = "\n".join([f"탐정: {turn['user']}\n{suspect_name}: {turn['bot']}" for turn in history])
         formatted_history += f"\n탐정: {current_user_message}"
         return formatted_history
 
-    def _save_to_history(self, suspect_id: str, user_message: str, bot_reply: str):
-        self.game_session["history"][suspect_id].append({"user": user_message, "bot": bot_reply})
+    def _save_to_history(self, suspect_id: str, user_message: str, bot_reply: str, session_id: str):
+        game_session = self._get_game_session(session_id)
+        game_session["history"][suspect_id].append({"user": user_message, "bot": bot_reply})
 
     def _load_json_file(self, file_path: Path) -> dict | None:
         if not file_path.exists(): return None
@@ -689,7 +765,7 @@ class ChatbotService:
 """
             
             response = self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-4o",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.3,
                 max_tokens=10

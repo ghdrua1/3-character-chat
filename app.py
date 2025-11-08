@@ -2,8 +2,9 @@
 
 import os
 import json
+import uuid
 from pathlib import Path
-from flask import Flask, request, render_template, jsonify, url_for
+from flask import Flask, request, render_template, jsonify, url_for, session
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -40,14 +41,34 @@ def chat():
 
 @app.route('/api/start_new_game', methods=['POST'])
 def start_new_game():
+    # 프론트엔드에서 전송한 탭별 세션 ID 우선 사용
+    tab_session_id = request.headers.get('X-Tab-Session-ID')
+    if tab_session_id:
+        session_id = tab_session_id
+    else:
+        # 하위 호환성: Flask 세션에서 session_id 가져오기 또는 생성
+        if 'session_id' not in session:
+            session['session_id'] = str(uuid.uuid4())
+        session_id = session['session_id']
+    
     from services import get_chatbot_service
     chatbot = get_chatbot_service()
-    chatbot.start_new_game()
+    chatbot.start_new_game(session_id)
     return jsonify({"message": "New game started successfully."})
 
 @app.route('/api/chat', methods=['POST'])
 def api_chat():
     try:
+        # 프론트엔드에서 전송한 탭별 세션 ID 우선 사용
+        tab_session_id = request.headers.get('X-Tab-Session-ID')
+        if tab_session_id:
+            session_id = tab_session_id
+        else:
+            # 하위 호환성: Flask 세션에서 session_id 가져오기 또는 생성
+            if 'session_id' not in session:
+                session['session_id'] = str(uuid.uuid4())
+            session_id = session['session_id']
+        
         data = request.get_json()
         user_message = data.get('message', '')
         suspect_id = data.get('suspect_id')
@@ -55,7 +76,7 @@ def api_chat():
             return jsonify({'error': 'Message is required'}), 400
         from services import get_chatbot_service
         chatbot = get_chatbot_service()
-        response = chatbot.generate_response(user_message, suspect_id)
+        response = chatbot.generate_response(user_message, suspect_id, session_id)
         return jsonify(response)
     except Exception as e:
         import traceback; traceback.print_exc()
@@ -74,6 +95,16 @@ def api_recommendations():
 @app.route('/api/accuse', methods=['POST'])
 def api_accuse():
     try:
+        # 프론트엔드에서 전송한 탭별 세션 ID 우선 사용
+        tab_session_id = request.headers.get('X-Tab-Session-ID')
+        if tab_session_id:
+            session_id = tab_session_id
+        else:
+            # 하위 호환성: Flask 세션에서 session_id 가져오기 또는 생성
+            if 'session_id' not in session:
+                session['session_id'] = str(uuid.uuid4())
+            session_id = session['session_id']
+        
         data = request.get_json()
         accused_suspect_id = data.get('suspect_id')
         if not accused_suspect_id:
@@ -82,7 +113,10 @@ def api_accuse():
         from services import get_chatbot_service
         chatbot = get_chatbot_service()
         
-        result = chatbot.make_accusation(accused_suspect_id)
+        result = chatbot.make_accusation(accused_suspect_id, session_id)
+        
+        # 게임 종료 후 세션 정리 (선택적: 원하면 주석 해제)
+        # chatbot.cleanup_session(session_id)
         
         return jsonify(result)
 

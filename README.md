@@ -88,7 +88,6 @@ docker compose up --build
 
 - 📖 학습 목표: RAG, Embedding, LLM, Vector Database
 - 👥 협업 방식: 프로듀서가 기획한 내용을 바탕으로 캐릭터 챗봇을 완성
-- 🚀 배포: Render.com (무료) 또는 Railway를 통한 프로덕션 배포
 - 🐳 환경: Docker로 일관된 개발 환경 보장
 
 ### 핵심 기능
@@ -105,7 +104,7 @@ docker compose up --build
 - Backend: Flask (Python 3.11)
 - AI: OpenAI API, LangChain, ChromaDB
 - Frontend: Vanilla JavaScript, HTML, CSS
-- Deployment: Docker, Render.com (권장) / Railway
+- Infrastructure: Docker
 - Version Control: Git, GitHub
 
 ## 🏗️ 프로젝트 구조
@@ -330,7 +329,7 @@ git push origin feature/chatbot-service
 🌐 배포 URL: https://your-app-name.onrender.com
 ```
 
-> 📝 배포 방법: [RENDER-GUIDE.md](RENDER-GUIDE.md) 참고
+> 📝 배포 방법: [RENDER-GUIDE.md](RENDER-GUIDE.md) 참고 (선택사항)
 
 #### 2️⃣ 프로젝트 README.md 작성
 
@@ -476,7 +475,7 @@ git push origin feature/chatbot-service
 
 ---
 
-### 🔧 Slide 6: 트러블슈팅 ① - 키워드 → RAG
+### 🔧 Slide 6: 트러블슈팅 1 - 키워드 → RAG
 
 ```
 ❌ 문제: 키워드 매칭의 한계
@@ -511,7 +510,7 @@ git push origin feature/chatbot-service
 
 ---
 
-### 🔧 Slide 7: 트러블슈팅 ③ - 데이터 부족
+### 🔧 Slide 7: 트러블슈팅 2 - 데이터 부족
 
 ```
 ❌ 문제: 범인 데이터 부족
@@ -591,6 +590,10 @@ git push origin feature/chatbot-service
    → 점진적 개선의 중요성
 ```
 
-### 🎤 최종 발표 PPT 가이드
 
-위의 README.md 내용을 기반으로 팀별 최종 발표 PPT를 작성해주세요.
+### 📚 발표 시 참고 사항
+
+- 각 슬라이드는 프로젝트의 핵심 기술과 문제 해결 과정을 보여줍니다
+- 트러블슈팅 섹션에서는 실제 겪은 문제와 해결 방법을 구체적으로 설명합니다
+- 코드 예시는 필요 시 추가하되, 핵심 아이디어를 명확히 전달하는 것에 집중합니다
+- 발표 시에는 시연을 통해 실제 게임 플레이를 보여주는 것이 효과적입니다
