@@ -199,7 +199,7 @@ class ChatbotService:
             system_prompt = suspect_config['system_prompt_killer'] if is_killer else suspect_config['system_prompt_innocent']
             history = self._get_conversation_history(suspect_id, user_message, session_id)
             final_prompt = self._build_final_prompt(suspect_config, system_prompt, history, user_message, retrieved_doc)
-            response = self.client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "user", "content": final_prompt}], temperature=0.7, max_tokens=300)
+            response = self.client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": final_prompt}], temperature=0.7, max_tokens=300)
             reply = response.choices[0].message.content.strip()
             
             # --- 감정 분석 및 이미지 선택 ---
@@ -306,7 +306,7 @@ class ChatbotService:
      - 진범의 범행 방식(어떻게): {confession_details.get('how')}
 """
 
-        response = self.client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "user", "content": final_prompt}], temperature=0.7, max_tokens=500)
+        response = self.client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": final_prompt}], temperature=0.7, max_tokens=500)
         final_statement = response.choices[0].message.content.strip()
         
         # 감정 분석 및 이미지 추가
@@ -765,7 +765,7 @@ class ChatbotService:
 """
             
             response = self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-4o",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.3,
                 max_tokens=10

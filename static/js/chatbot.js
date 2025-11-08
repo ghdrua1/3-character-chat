@@ -165,7 +165,7 @@ document.addEventListener("DOMContentLoaded", () => {
       console.error("메시지 전송 에러:", err);
       appendMessage(
         "system",
-        "죄송합니다, 서버와 통신 중 오류가 발생했습니다."
+        "죄송합니다, 서버와 통신 중 오류가 발생했습니다. 새로고침하여 다시 시도해주세요."
       );
     } finally {
       setLoading(false);
