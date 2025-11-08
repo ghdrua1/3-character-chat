@@ -34,6 +34,8 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
+        flex-wrap: wrap;
+        gap: 10px;
       }
       .header-title {
         font-size: 1.2em;
@@ -195,7 +197,7 @@
         background-color: #3a3a3a;
         color: #fff;
         box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.5);
-        font-size: 1em;
+        font-size: 16px; /* iOS Safari 자동 확대 방지 */
       }
       #send-btn {
         background-color: #4a4a4a;
@@ -344,35 +346,344 @@
         line-height: 1.6;
         font-size: 0.9em;
       }
-      @media (max-width: 768px) {
+
+      /* 스크롤바 스타일링 (모바일 최적화) */
+      #chat-log::-webkit-scrollbar,
+      #recommended-questions-container::-webkit-scrollbar,
+      .sidebar::-webkit-scrollbar {
+        width: 6px;
+      }
+
+      #chat-log::-webkit-scrollbar-track,
+      #recommended-questions-container::-webkit-scrollbar-track,
+      .sidebar::-webkit-scrollbar-track {
+        background: rgba(42, 42, 42, 0.5);
+      }
+
+      #chat-log::-webkit-scrollbar-thumb,
+      #recommended-questions-container::-webkit-scrollbar-thumb,
+      .sidebar::-webkit-scrollbar-thumb {
+        background: rgba(139, 30, 45, 0.6);
+        border-radius: 3px;
+      }
+
+      #chat-log::-webkit-scrollbar-thumb:hover,
+      #recommended-questions-container::-webkit-scrollbar-thumb:hover,
+      .sidebar::-webkit-scrollbar-thumb:hover {
+        background: rgba(139, 30, 45, 0.8);
+      }
+
+      /* 터치 디바이스 최적화 */
+      @media (hover: none) and (pointer: coarse) {
+        .suspect-tab:active,
+        .reco-btn:active,
+        #send-btn:active,
+        #accuse-btn:active,
+        .suspect-select-btn:active {
+          opacity: 0.7;
+          transform: scale(0.98);
+        }
+      }
+      /* 태블릿 (768px ~ 1024px) */
+      @media (max-width: 1024px) and (min-width: 769px) {
         .sidebar {
-          width: 100%;
-          border-right: none;
-          border-bottom: 3px solid #000;
+          width: 240px;
+          padding: 15px;
         }
-        .chat-container {
-          flex-direction: column;
+        .header-title {
+          font-size: 1.1em;
         }
-        .suspect-tabs {
-          flex-direction: row;
-          overflow-x: auto;
+        .game-info {
+          font-size: 0.85em;
         }
-        .suspect-info-header {
-          flex-direction: column;
-          align-items: center;
-          text-align: center;
+        .message {
+          max-width: 75%;
         }
         .suspect-info-image {
           width: 100px;
           height: 100px;
         }
       }
+
+      /* 모바일/태블릿 (768px 이하) */
+      @media (max-width: 768px) {
+        .header {
+          padding: 12px 15px;
+          flex-wrap: wrap;
+          flex-direction: row;
+        }
+        .header-title {
+          font-size: 1em;
+          flex: 1 1 100%;
+          margin-bottom: 8px;
+        }
+        .header-right-content {
+          width: 100%;
+          justify-content: space-between;
+        }
+        .game-info {
+          font-size: 0.85em;
+        }
+        .audio-toggle-btn {
+          width: 35px;
+          height: 35px;
+          font-size: 1em;
+        }
+        .chat-container {
+          flex-direction: column;
+        }
+        .sidebar {
+          width: 100%;
+          border-right: none;
+          border-bottom: 3px solid #000;
+          padding: 15px;
+          max-height: 40vh;
+          overflow-y: auto;
+        }
+        .suspect-tabs {
+          flex-direction: row;
+          overflow-x: auto;
+          gap: 8px;
+          margin-bottom: 15px;
+          padding-bottom: 5px;
+        }
+        .suspect-tab {
+          padding: 12px 15px;
+          font-size: 0.9em;
+          white-space: nowrap;
+          min-width: fit-content;
+        }
+        .recommendations {
+          margin-top: 15px;
+        }
+        .recommendations h3 {
+          font-size: 0.95em;
+        }
+        #recommended-questions-container {
+          height: 200px;
+          max-height: 30vh;
+        }
+        .reco-btn {
+          padding: 8px;
+          font-size: 0.8em;
+        }
+        #accusation-section {
+          height: auto;
+          padding-top: 15px;
+        }
+        #accuse-btn {
+          padding: 12px;
+          font-size: 1em;
+        }
+        .main-chat {
+          min-height: 60vh;
+        }
+        #chat-log {
+          padding: 15px;
+        }
+        .message {
+          max-width: 85%;
+          padding: 8px 12px;
+          font-size: 0.95em;
+        }
+        .message.bot img {
+          max-height: 200px;
+          width: auto;
+        }
+        .sender-name {
+          font-size: 0.85em;
+        }
+        .chat-input-area {
+          padding: 12px;
+        }
+        #user-message {
+          padding: 8px 12px;
+          font-size: 16px; /* iOS Safari 자동 확대 방지 유지 */
+        }
+        #send-btn {
+          width: 40px;
+          height: 40px;
+          font-size: 1.1em;
+        }
+        .suspect-info-card {
+          padding: 15px;
+        }
+        .suspect-info-header {
+          flex-direction: column;
+          align-items: center;
+          text-align: center;
+          gap: 10px;
+        }
+        .suspect-info-image {
+          width: 100px;
+          height: 100px;
+        }
+        .suspect-info-name {
+          font-size: 1.2em;
+        }
+        .suspect-info-item {
+          font-size: 0.9em;
+        }
+        .suspect-info-description {
+          font-size: 0.85em;
+        }
+        .modal-content {
+          padding: 20px;
+          margin: 10% 5%;
+          width: 90%;
+        }
+        .modal-content h2 {
+          font-size: 1.2em;
+        }
+        #suspect-selection {
+          flex-direction: column;
+          gap: 10px;
+        }
+        .suspect-select-btn {
+          padding: 12px 20px;
+          font-size: 0.95em;
+        }
+      }
+
+      /* 작은 모바일 (480px 이하) */
+      @media (max-width: 480px) {
+        .header {
+          padding: 10px 12px;
+        }
+        .header-title {
+          font-size: 0.9em;
+        }
+        .game-info {
+          font-size: 0.8em;
+        }
+        .sidebar {
+          padding: 12px;
+          max-height: 35vh;
+        }
+        .suspect-tab {
+          padding: 10px 12px;
+          font-size: 0.85em;
+        }
+        #recommended-questions-container {
+          height: 150px;
+          max-height: 25vh;
+        }
+        .reco-btn {
+          padding: 7px;
+          font-size: 0.75em;
+        }
+        .message {
+          max-width: 90%;
+          padding: 7px 10px;
+          font-size: 0.9em;
+        }
+        .message.bot img {
+          max-height: 150px;
+        }
+        .sender-name {
+          font-size: 0.8em;
+        }
+        #chat-log {
+          padding: 12px;
+        }
+        .chat-input-area {
+          padding: 10px;
+        }
+        #user-message {
+          padding: 7px 10px;
+          font-size: 16px; /* iOS Safari 자동 확대 방지 유지 */
+        }
+        #send-btn {
+          width: 35px;
+          height: 35px;
+          font-size: 1em;
+          margin-left: 8px;
+        }
+        .suspect-info-card {
+          padding: 12px;
+        }
+        .suspect-info-image {
+          width: 80px;
+          height: 80px;
+        }
+        .suspect-info-name {
+          font-size: 1.1em;
+        }
+        .suspect-info-item {
+          font-size: 0.85em;
+        }
+        .suspect-info-description {
+          font-size: 0.8em;
+          padding-top: 12px;
+        }
+        #accuse-btn {
+          padding: 10px;
+          font-size: 0.95em;
+        }
+        .modal-content {
+          padding: 15px;
+          margin: 15% 3%;
+          width: 94%;
+        }
+        .modal-content h2 {
+          font-size: 1.1em;
+        }
+        .modal-content p {
+          font-size: 0.9em;
+        }
+        .suspect-select-btn {
+          padding: 10px 15px;
+          font-size: 0.9em;
+        }
+      }
+
+      /* 매우 작은 모바일 (360px 이하) */
+      @media (max-width: 360px) {
+        .header-title {
+          font-size: 0.85em;
+        }
+        .suspect-tab {
+          padding: 8px 10px;
+          font-size: 0.8em;
+        }
+        .message {
+          max-width: 95%;
+          font-size: 0.85em;
+        }
+        .message.bot img {
+          max-height: 120px;
+        }
+      }
+
+      /* 가로 모드 (landscape) 최적화 */
+      @media (max-height: 500px) and (orientation: landscape) {
+        .sidebar {
+          max-height: 50vh;
+        }
+        #recommended-questions-container {
+          max-height: 20vh;
+          height: 120px;
+        }
+        .main-chat {
+          min-height: 50vh;
+        }
+        .header {
+          padding: 8px 15px;
+        }
+        .header-title {
+          font-size: 0.95em;
+        }
+        .game-info {
+          font-size: 0.8em;
+        }
+      }
+
     </style>
   </head>
   <body>
     <header class="header">
       <div class="header-title">{{ bot_name }}</div>
-      <div style="display: flex; align-items: center; gap: 15px">
+      <div class="header-right-content" style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
         <div class="game-info">
           남은 질문: <span id="questions-left-display">15</span>회
         </div>
