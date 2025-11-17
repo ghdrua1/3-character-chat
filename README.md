@@ -38,27 +38,27 @@ AI 기반 인터랙티브 추리 게임.
 ### 🎬 1. 인트로 화면
 플레이어가 탐정으로서 사건에 진입하기 전 보여주는 시작 페이지
 
-<p align="center"> <img src="static/images/readme/intro1.png" width="420"> <img src="static/images/readme/intro2.png" width="420"> </p>
+<p align="center"> <img src="static/images/readme/intro1.png" width="400"> <img src="static/images/readme/intro2.png" width="400"> </p>
 
 ### 📝 2. 시작 브리핑 화면 (경찰 초기 보고)
 피해자 정보, 사건 개요, 장소 등의 첫 브리핑을 제공하는 화면
 
-<p align="center"> <img src="static/images/readme/briefing1.png" width="420"> <img src="static/images/readme/briefing2.png" width="420"> </p>
+<p align="center"> <img src="static/images/readme/briefing1.png" width="400"> <img src="static/images/readme/briefing2.png" width="400"> </p>
 
 ### 💬 3. 심문 화면 (용의자 대화)
 용의자 3명의 탭을 이동하며 자유 질문을 입력하는 메인 추리 단계
 
-<p align="center"> <img src="static/images/readme/interrogate1.png" width="420"> <img src="static/images/readme/interrogate2.png" width="420"> </p>
+<p align="center"> <img src="static/images/readme/interrogate1.png" width="400"> <img src="static/images/readme/interrogate2.png" width="400"> </p>
 
 ### 🎯 4. 범인 지목 화면
 질문이 5개 이하로 남으면 활성화되어, 최종적으로 범인을 특정하는 화면
 
-<p align="center"> <img src="static/images/readme/accuse1.png" width="420"> <img src="static/images/readme/accuse2.png" width="420"> </p>
+<p align="center"> <img src="static/images/readme/accuse1.png" width="400"> <img src="static/images/readme/accuse2.png" width="400"> </p>
 
 ### 🔔 5. 결말 화면 (엔딩)
 범인을 맞췄는지 여부에 따라 엔딩 이미지와 결론 메시지가 달라지는 결과 페이지
 
-<p align="center"> <img src="static/images/readme/ending1.png" width="420"> <img src="static/images/readme/ending2.png" width="420"> </p>
+<p align="center"> <img src="static/images/readme/ending1.png" width="400"> <img src="static/images/readme/ending2.png" width="400"> </p>
 
 ---
 
@@ -401,3 +401,20 @@ chatbot_service.py
    → 자연스러운 대화 (프롬프트 엔지니어링)
    → 점진적 개선의 중요성
 ```
+
+## 👥 Contributors
+
+### 🛠 Engineering
+| Name | Role | GitHub |
+|------|------|--------|
+| **이홍겸** | Backend Engineer | [@ghdrua1](https://github.com/ghdrua1) |
+| **정인영** | Frontend Engineer | [@rmdnps10](https://github.com/rmdnps10) |
+
+### 🎨 Producing
+| Name | Role |
+|------|------|
+| **강건** | Producer |
+| **정나림** | Producer |
+
+**HateSlop 3기 엔지니어 × 프로듀서 합동 프로젝트**
+
